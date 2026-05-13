@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: silver_kikkoman_prices
+    description: "Silver — cleaned price observations with numeric EUR price and price-per-100ml."
+    columns:
+      - name: shop_name
+        tests: [not_null]
+      - name: brand
+        tests: [not_null]
+      - name: product_variant
+        tests: [not_null]
+      - name: volume_ml
+        tests: [not_null]
+      - name: price_eur
+        description: "Parsed numeric price in EUR."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0.01
+              max_value: 50.0
+      - name: price_per_100ml_eur
+        tests: [not_null]
+      - name: currency
+        tests:
+          - accepted_values:
+              values: ["EUR"]

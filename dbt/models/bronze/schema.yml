@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: bronze_kikkoman_prices
+    description: "Bronze — typed view over raw scrape data, no transformations."
+    columns:
+      - name: shop_name
+        description: "Online shop name."
+        tests: [not_null]
+      - name: raw_price
+        description: "Price string as scraped."
+        tests: [not_null]
+      - name: scraped_at
+        description: "UTC timestamp of the scrape."
+        tests: [not_null]

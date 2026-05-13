@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: raw
+    database: KIKKOMAN_DB
+    schema: RAW
+    description: "Raw landing zone — data loaded directly from the scraper CSV."
+    tables:
+      - name: kikkoman_prices_raw
+        description: "One row per shop per scrape run for Kikkoman Koikuchi Shoyu 500ml."
+        columns:
+          - name: shop_name
+            description: "Name of the online shop."
+          - name: product_name
+            description: "Product title as shown on the shop's website."
+          - name: raw_price
+            description: "Price string exactly as scraped, e.g. '€5,65'."
+          - name: currency
+            description: "Currency code, typically EUR."
+          - name: product_url
+            description: "Direct URL to the product page."
+          - name: scraped_at
+            description: "UTC timestamp when the scraper fetched this price."
+          - name: _loaded_at
+            description: "UTC timestamp when the row was inserted into Snowflake."

@@ -1,0 +1,29 @@
+name: kikkoman_price_tracker
+version: "1.0.0"
+config-version: 2
+
+profile: kikkoman_price_tracker
+
+model-paths: ["models"]
+seed-paths:  ["seeds"]
+test-paths:  ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  kikkoman_price_tracker:
+    bronze:
+      +schema: BRONZE
+      +materialized: view
+    silver:
+      +schema: SILVER
+      +materialized: view
+    gold:
+      +schema: GOLD
+      +materialized: table
+    datamart:
+      +schema: DATAMART
+      +materialized: view
