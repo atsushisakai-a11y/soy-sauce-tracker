@@ -1,4 +1,4 @@
-name: Scrape Kikkoman Prices & Load to Snowflake
+name: Scrape - Kikkoman Prices & Load to Snowflake
 
 on:
   workflow_dispatch:
