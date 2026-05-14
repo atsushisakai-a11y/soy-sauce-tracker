@@ -27,6 +27,31 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
+      - name: Check RAW_SHOPS table in Snowflake
+        run: |
+          python - <<'EOF'
+          import os, snowflake.connector
+          conn = snowflake.connector.connect(
+              account=os.environ["SNOWFLAKE_ACCOUNT"],
+              user=os.environ["SNOWFLAKE_USER"],
+              password=os.environ["SNOWFLAKE_PASSWORD"],
+              role=os.environ.get("SNOWFLAKE_ROLE",""),
+              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+              database="price_monitoring",
+              schema="RAW",
+          )
+          cur = conn.cursor()
+          cur.execute("SHOW TABLES LIKE 'RAW_SHOPS' IN SCHEMA price_monitoring.RAW")
+          tables = cur.fetchall()
+          print("Tables found:", tables)
+          if tables:
+              cur.execute("DESCRIBE TABLE price_monitoring.RAW.RAW_SHOPS")
+              print("Columns:", [r[0] for r in cur.fetchall()])
+              cur.execute("SELECT COUNT(*) FROM price_monitoring.RAW.RAW_SHOPS")
+              print("Row count:", cur.fetchone()[0])
+          conn.close()
+          EOF
+
       - name: dbt run - staging_shops
         run: cd dbt && dbt run --select +staging_shops
 
