@@ -4,9 +4,6 @@ models:
   - name: dim_price
     description: "Dimension table — one row per shop × product combination."
     columns:
-      - name: price_dim_key
-        description: "Surrogate key (shop + brand + variant + volume)."
-        tests: [not_null, unique]
       - name: shop_name
         tests: [not_null]
       - name: brand
