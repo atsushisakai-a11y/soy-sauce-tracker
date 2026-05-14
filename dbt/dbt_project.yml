@@ -24,7 +24,7 @@ models:
       +materialized: view
     staging:
       +schema: STAGING
-      +materialized: view
+      +materialized: table
     dwh:
       +schema: DWH
       +materialized: table
