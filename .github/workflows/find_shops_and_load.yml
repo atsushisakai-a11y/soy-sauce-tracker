@@ -2,8 +2,6 @@ name: Find Amsterdam Asian Shops & Load to Snowflake
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * 1"   # Every Monday at 03:00 UTC
 
 jobs:
   find-and-load:
