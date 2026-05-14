@@ -27,6 +27,7 @@ import requests
 import snowflake.connector
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -78,7 +79,15 @@ def get_shops_from_snowflake() -> list[dict]:
     )
     cur = conn.cursor()
     cur.execute("SELECT shop_name, website FROM staging_shops WHERE website IS NOT NULL")
-    rows = [{"shop_name": r[0], "website": r[1].rstrip("/")} for r in cur.fetchall()]
+    rows = []
+    seen_urls = set()
+    for r in cur.fetchall():
+        parsed = urlparse(r[1])
+        base = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        if base not in seen_urls:
+            seen_urls.add(base)
+            rows.append({"shop_name": r[0], "website": base})
+
     cur.close()
     conn.close()
     log.info("Loaded %d shops from Snowflake staging_shops", len(rows))
