@@ -15,13 +15,4 @@ SELECT
 FROM {{ ref('raw_shops') }}
 
 WHERE website IS NOT NULL
-  AND (
-           LOWER(cuisine) LIKE '%asian%'
-        OR LOWER(cuisine) LIKE '%japanese%'
-        OR LOWER(cuisine) LIKE '%chinese%'
-        OR LOWER(cuisine) LIKE '%korean%'
-        OR LOWER(cuisine) LIKE '%sushi%'
-        OR LOWER(cuisine) LIKE '%thai%'
-        OR LOWER(cuisine) LIKE '%vietnamese%'
-      )
   AND LOWER(shop_type) IN ('convenience', 'supermarket', 'toko')
