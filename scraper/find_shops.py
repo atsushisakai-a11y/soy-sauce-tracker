@@ -10,6 +10,7 @@ import csv
 import json
 import logging
 import os
+import sys
 import time
 
 import requests
@@ -142,3 +143,4 @@ if __name__ == "__main__":
             print(f"  {s['name']:<35} {s['address']:<30} {website_display}")
     else:
         log.error("No shops found — check the Overpass query or your internet connection.")
+        sys.exit(1)

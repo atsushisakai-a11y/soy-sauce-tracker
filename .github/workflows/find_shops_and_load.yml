@@ -29,6 +29,13 @@ jobs:
       - name: Find Amsterdam Asian shops
         run: cd scraper && python find_shops.py
 
+      - name: Check CSV was created
+        run: |
+          echo "=== scraper/output contents ==="
+          ls -lh scraper/output/
+          echo "=== first 5 lines of CSV ==="
+          head -5 scraper/output/amsterdam_asian_shops.csv
+
       - name: Load shops to Snowflake
         run: python loader/load_shops_to_snowflake.py scraper/output/amsterdam_asian_shops.csv
 
