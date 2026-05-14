@@ -16,4 +16,4 @@ SELECT DISTINCT
     currency,
     product_url
 
-FROM {{ ref('staging_kikkoman_prices') }}
+FROM {{ ref('staging_prices') }}
