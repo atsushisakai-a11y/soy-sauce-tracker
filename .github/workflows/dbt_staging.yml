@@ -39,7 +39,11 @@ jobs:
           cat dbt/dbt_project.yml
 
       - name: dbt run - staging_kikkoman_prices
-        run: cd dbt && dbt run --select staging_kikkoman_prices --log-level debug 2>&1 | head -100
+        run: |
+          cd dbt
+          dbt run --select staging_kikkoman_prices --log-level debug 2>&1 | tee /tmp/dbt_output.txt || true
+          echo "=== lines mentioning schema ==="
+          grep -i "schema\|generate_schema\|kikkoman dispatch\|>>>" /tmp/dbt_output.txt || echo "no matches"
 
       - name: dbt test - staging_kikkoman_prices
         run: cd dbt && dbt test --select staging_kikkoman_prices
