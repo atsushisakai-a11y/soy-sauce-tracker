@@ -27,23 +27,8 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
-      - name: Debug - check macro file and package conflicts
-        run: |
-          echo "=== our macro file ==="
-          cat dbt/macros/generate_schema_name.sql
-          echo ""
-          echo "=== packages that define generate_schema_name ==="
-          find dbt/dbt_packages -name "*.sql" | xargs grep -l "generate_schema_name" 2>/dev/null || echo "none found"
-          echo ""
-          echo "=== dbt_project.yml ==="
-          cat dbt/dbt_project.yml
+      - name: dbt run - staging_prices
+        run: cd dbt && dbt run --select staging_prices
 
-      - name: dbt run - staging_kikkoman_prices
-        run: |
-          cd dbt
-          dbt run --select staging_kikkoman_prices --log-level debug 2>&1 | tee /tmp/dbt_output.txt || true
-          echo "=== lines mentioning schema ==="
-          grep -i "schema\|generate_schema\|kikkoman dispatch\|>>>" /tmp/dbt_output.txt || echo "no matches"
-
-      - name: dbt test - staging_kikkoman_prices
-        run: cd dbt && dbt test --select staging_kikkoman_prices
+      - name: dbt test - staging_prices
+        run: cd dbt && dbt test --select staging_prices
