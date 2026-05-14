@@ -18,8 +18,13 @@ import requests
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-OVERPASS_URL = "https://overpass.kumi.systems/api/interpreter"
-TIMEOUT = 30
+OVERPASS_SERVERS = [
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+]
+TIMEOUT = 60
 
 # Overpass QL query:
 # Finds nodes/ways in Amsterdam tagged as supermarkets or shops
@@ -44,17 +49,22 @@ out skel qt;
 
 
 def fetch_shops() -> list[dict]:
-    log.info("Querying OpenStreetMap Overpass API …")
-    try:
-        r = requests.post(
-            OVERPASS_URL,
-            data={"data": QUERY},
-            headers={"Accept": "application/json"},
-            timeout=TIMEOUT,
-        )
-        r.raise_for_status()
-    except requests.RequestException as e:
-        log.error("Overpass API request failed: %s", e)
+    for server in OVERPASS_SERVERS:
+        log.info("Trying Overpass server: %s", server)
+        try:
+            r = requests.post(
+                server,
+                data={"data": QUERY},
+                headers={"Accept": "application/json"},
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            log.info("Success from %s", server)
+            break
+        except requests.RequestException as e:
+            log.warning("Server %s failed: %s — trying next …", server, e)
+    else:
+        log.error("All Overpass servers failed.")
         return []
 
     elements = r.json().get("elements", [])
