@@ -2,24 +2,17 @@ version: 2
 
 models:
   - name: datamart_price_comparison
-    description: >
-      Datamart — final price comparison view for the Kikkoman proposal.
-      One row per shop per scrape date, enriched with market benchmarks,
-      price rank, and a suggested reference price.
+    description: "Datamart — market price summary for Kikkoman Koikuchi Shoyu 500ml."
     columns:
-      - name: shop_name
+      - name: brand
         tests: [not_null]
-      - name: price_eur
+      - name: product_name
         tests: [not_null]
-      - name: price_rank
-        description: "1 = cheapest shop in this snapshot."
+      - name: shop_count
         tests: [not_null]
-      - name: pct_vs_avg
-        description: "% above (positive) or below (negative) market average price."
-      - name: price_position
-        description: "Cheapest / At Market / Above Market / Below Market."
-        tests:
-          - accepted_values:
-              values: ["Cheapest", "At Market", "Above Market", "Below Market"]
-      - name: suggested_price_eur
-        description: "Market average rounded to nearest €0.05 — reference for Kikkoman proposal."
+      - name: min_price_eur
+        tests: [not_null]
+      - name: max_price_eur
+        tests: [not_null]
+      - name: avg_price_eur
+        tests: [not_null]
