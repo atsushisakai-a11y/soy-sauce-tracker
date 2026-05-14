@@ -6,6 +6,28 @@ sources:
     schema: RAW
     description: "Raw landing zone — data loaded directly from the scraper CSV."
     tables:
+      - name: RAW_SHOPS
+        description: "Amsterdam Asian shops discovered via OpenStreetMap — full refresh on every run."
+        columns:
+          - name: NAME
+            description: "Shop name."
+          - name: ADDRESS
+            description: "Street address."
+          - name: WEBSITE
+            description: "Shop website URL (may be empty)."
+          - name: PHONE
+            description: "Phone number (may be empty)."
+          - name: CUISINE
+            description: "Cuisine tags from OpenStreetMap."
+          - name: SHOP_TYPE
+            description: "OSM shop tag value, e.g. supermarket, convenience."
+          - name: OSM_ID
+            description: "OpenStreetMap element ID."
+          - name: OSM_TYPE
+            description: "OSM element type: node or way."
+          - name: _LOADED_AT
+            description: "UTC timestamp when the row was inserted into Snowflake."
+
       - name: raw_kikkoman_prices
         description: "One row per shop per scrape run for Kikkoman Koikuchi Shoyu 500ml."
         columns:
