@@ -16,12 +16,14 @@ FROM {{ ref('raw_shops') }}
 WHERE website IS NOT NULL
   AND website != ''
   AND (
-       LOWER(cuisine) LIKE '%asian%'
-    OR LOWER(cuisine) LIKE '%japanese%'
-    OR LOWER(cuisine) LIKE '%chinese%'
-    OR LOWER(cuisine) LIKE '%korean%'
-    OR LOWER(cuisine) LIKE '%sushi%'
-    OR LOWER(cuisine) LIKE '%thai%'
-    OR LOWER(cuisine) LIKE '%vietnamese%'
+        (
+           LOWER(cuisine) LIKE '%asian%'
+        OR LOWER(cuisine) LIKE '%japanese%'
+        OR LOWER(cuisine) LIKE '%chinese%'
+        OR LOWER(cuisine) LIKE '%korean%'
+        OR LOWER(cuisine) LIKE '%sushi%'
+        OR LOWER(cuisine) LIKE '%thai%'
+        OR LOWER(cuisine) LIKE '%vietnamese%'
+        )
+     OR LOWER(shop_type) IN ('convenience', 'supermarket', 'toko')
   )
-  AND LOWER(shop_type) IN ('convenience', 'supermarket', 'toko')
