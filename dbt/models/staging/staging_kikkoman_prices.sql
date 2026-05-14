@@ -39,7 +39,7 @@ WITH cleaned AS (
 
 SELECT
     scrape_run_id,
-    {{ dbt_utils.generate_surrogate_key(['product_name']) }}
+    {{ dbt_utils.generate_surrogate_key(['product_name', 'shop_name', 'volume_ml', 'product_url']) }}
                                                 AS product_id,
     shop_name,
     'Kikkoman'                                  AS brand,
