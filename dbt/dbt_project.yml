@@ -13,6 +13,10 @@ macro-paths: ["macros"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+dispatch:
+  - macro_namespace: dbt
+    search_order: ['kikkoman_price_tracker', 'dbt']
+
 models:
   kikkoman_price_tracker:
     raw:
