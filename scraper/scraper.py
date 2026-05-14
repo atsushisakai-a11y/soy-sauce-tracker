@@ -108,7 +108,36 @@ def _is_kikkoman_500(title: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _try_shopify(shop_name: str, base_url: str, scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
-    """Search Shopify /products.json for Kikkoman 500ml."""
+    """Search Shopify store for Kikkoman 500ml using the search API, with products.json fallback."""
+    # Strategy 1: Shopify search API (works even with large catalogues)
+    for q in ["kikkoman shoyu 500", "kikkoman soy sauce 500", "kikkoman"]:
+        url = f"{base_url}/search/suggest.json?q={q.replace(' ', '+')}&resources[type]=product&resources[limit]=10"
+        r = _get(url)
+        if not r:
+            break
+        try:
+            results = r.json().get("resources", {}).get("results", {}).get("products", [])
+        except Exception:
+            break
+        for product in results:
+            title = product.get("title", "")
+            if not _is_kikkoman_500(title):
+                continue
+            price = product.get("price", "")
+            product_url = product.get("url", "")
+            if product_url and not product_url.startswith("http"):
+                product_url = base_url + product_url
+            return PriceRecord(
+                scrape_run_id=scrape_run_id,
+                shop_name=shop_name,
+                product_name=title,
+                raw_price=f"€{price}" if price else "",
+                currency="EUR",
+                product_url=product_url,
+                scraped_at=scraped_at,
+            )
+
+    # Strategy 2: products.json (first page — confirms it's Shopify)
     url = f"{base_url}/products.json?limit=250"
     r = _get(url)
     if not r:
@@ -118,7 +147,7 @@ def _try_shopify(shop_name: str, base_url: str, scrape_run_id: str, scraped_at: 
     except Exception:
         return None
     if not products:
-        return None  # not a Shopify store or empty catalogue
+        return None  # not a Shopify store
 
     for product in products:
         title = product.get("title", "")
@@ -220,6 +249,39 @@ def _try_html_search(shop_name: str, base_url: str, scrape_run_id: str, scraped_
 
 
 # ---------------------------------------------------------------------------
+# Hardcoded fallbacks for shops not in OSM data
+# ---------------------------------------------------------------------------
+
+HARDCODED_SHOPS = [
+    {
+        "shop_name": "NikanKitchen",
+        "website": "https://www.nikankitchen.com",
+        "product_url": "https://www.nikankitchen.com/en/products/2611/kikkoman-shoyu-soy-sauce-500ml",
+        "product_name": "Kikkoman Shoyu Soy Sauce 500ml",
+    },
+]
+
+
+def _scrape_hardcoded(shop: dict, scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
+    r = _get(shop["product_url"])
+    if not r:
+        return None
+    soup = BeautifulSoup(r.text, "html.parser")
+    meta = soup.find("meta", {"itemprop": "price"})
+    if meta and meta.get("content"):
+        return PriceRecord(
+            scrape_run_id=scrape_run_id,
+            shop_name=shop["shop_name"],
+            product_name=shop["product_name"],
+            raw_price=f"€{float(meta['content']):.2f}",
+            currency="EUR",
+            product_url=shop["product_url"],
+            scraped_at=scraped_at,
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -252,7 +314,19 @@ def run() -> list[PriceRecord]:
             log.info("  – %s — Kikkoman 500ml not found", shop_name)
         time.sleep(1)
 
-    log.info("Found prices in %d / %d shops", len(records), len(shops))
+    log.info("Found prices in %d / %d shops from Snowflake", len(records), len(shops))
+
+    # Hardcoded shops not in OSM data
+    for shop in HARDCODED_SHOPS:
+        log.info("Scraping %s (hardcoded) …", shop["shop_name"])
+        record = _scrape_hardcoded(shop, scrape_run_id, scraped_at)
+        if record:
+            records.append(record)
+            log.info("  ✓ %s — %s", shop["shop_name"], record.raw_price)
+        else:
+            log.info("  – %s — price not found", shop["shop_name"])
+        time.sleep(1)
+
     return records
 
 

@@ -15,4 +15,5 @@ SELECT
 FROM {{ ref('raw_shops') }}
 
 WHERE website IS NOT NULL
+  AND website != ''
   AND LOWER(shop_type) IN ('convenience', 'supermarket', 'toko')
