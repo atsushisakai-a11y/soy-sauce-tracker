@@ -1,4 +1,4 @@
-{{ config(materialized='view') }}
+{{ config(materialized='table') }}
 
 /*
   Silver layer — cleaned and standardised prices.
