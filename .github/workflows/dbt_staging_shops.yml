@@ -28,7 +28,7 @@ jobs:
         run: cd dbt && dbt deps
 
       - name: dbt run - staging_shops
-        run: cd dbt && dbt run --select staging_shops
+        run: cd dbt && dbt run --select +staging_shops
 
       - name: dbt test - staging_shops
-        run: cd dbt && dbt test --select staging_shops
+        run: cd dbt && dbt test --select +staging_shops
