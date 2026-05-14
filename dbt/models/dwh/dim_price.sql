@@ -9,6 +9,7 @@
 SELECT DISTINCT
     product_id,
     shop_name,
+    product_name,
     brand,
     product_variant,
     volume_ml,
