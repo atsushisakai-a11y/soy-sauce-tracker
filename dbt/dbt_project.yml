@@ -15,14 +15,14 @@ clean-targets: ["target", "dbt_packages"]
 
 models:
   kikkoman_price_tracker:
-    bronze:
-      +schema: BRONZE
+    raw:
+      +schema: RAW
       +materialized: view
-    silver:
-      +schema: SILVER
+    staging:
+      +schema: STAGING
       +materialized: view
-    gold:
-      +schema: GOLD
+    dwh:
+      +schema: DWH
       +materialized: table
     datamart:
       +schema: DATAMART

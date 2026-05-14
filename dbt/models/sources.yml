@@ -6,9 +6,11 @@ sources:
     schema: RAW
     description: "Raw landing zone — data loaded directly from the scraper CSV."
     tables:
-      - name: kikkoman_prices_raw
+      - name: raw_kikkoman_prices
         description: "One row per shop per scrape run for Kikkoman Koikuchi Shoyu 500ml."
         columns:
+          - name: scrape_run_id
+            description: "UUID shared by all shops scraped in the same run."
           - name: shop_name
             description: "Name of the online shop."
           - name: product_name

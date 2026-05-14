@@ -1,0 +1,42 @@
+name: Scrape Kikkoman Prices & Load to Snowflake
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scrape-and-load:
+    runs-on: ubuntu-latest
+
+    env:
+      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE:  price_monitoring
+      SNOWFLAKE_SCHEMA:    raw
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml snowflake-connector-python python-dotenv
+
+      - name: Run scraper
+        run: cd scraper && python scraper.py
+
+      - name: Load CSV to Snowflake
+        run: |
+          CSV=$(ls scraper/output/kikkoman_prices_*.csv | tail -1)
+          echo "Loading $CSV"
+          python loader/load_to_snowflake.py "$CSV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kikkoman-prices-${{ github.run_id }}
+          path: scraper/output/*.csv
+          retention-days: 90

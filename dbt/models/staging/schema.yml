@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: silver_kikkoman_prices
+  - name: staging_kikkoman_prices
     description: "Silver — cleaned price observations with numeric EUR price and price-per-100ml."
     columns:
       - name: shop_name

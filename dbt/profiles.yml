@@ -1,0 +1,16 @@
+# Used by GitHub Actions (reads credentials from env vars injected as secrets).
+# Safe to commit — contains no real credentials.
+
+kikkoman_price_tracker:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+      database: price_monitoring
+      schema: RAW
+      threads: 4
+      client_session_keep_alive: false

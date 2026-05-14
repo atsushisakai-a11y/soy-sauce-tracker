@@ -15,7 +15,7 @@
 */
 
 WITH silver AS (
-    SELECT * FROM {{ ref('silver_kikkoman_prices') }}
+    SELECT * FROM {{ ref('staging_kikkoman_prices') }}
 ),
 
 gold AS (

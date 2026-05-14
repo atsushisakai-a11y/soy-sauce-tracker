@@ -1,9 +1,10 @@
 """
-Load scraper CSV output into Snowflake RAW.KIKKOMAN_PRICES_RAW.
+Load scraper CSV output into Snowflake price_monitoring.raw.RAW_KIKKOMAN_PRICES.
+Every run always inserts new rows — no deduplication.
 
 Usage:
     pip install snowflake-connector-python python-dotenv
-    python load_to_snowflake.py output/kikkoman_prices_<timestamp>.csv
+    python load_to_snowflake.py <path/to/csv>
 """
 
 import csv
@@ -22,7 +23,7 @@ REQUIRED_ENV = [
     "SNOWFLAKE_PASSWORD",
     "SNOWFLAKE_WAREHOUSE",
     "SNOWFLAKE_DATABASE",
-    "SNOWFLAKE_RAW_SCHEMA",
+    "SNOWFLAKE_SCHEMA",
 ]
 
 
@@ -35,9 +36,10 @@ def get_conn():
         account=os.environ["SNOWFLAKE_ACCOUNT"],
         user=os.environ["SNOWFLAKE_USER"],
         password=os.environ["SNOWFLAKE_PASSWORD"],
+        role=os.environ.get("SNOWFLAKE_ROLE", ""),
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
         database=os.environ["SNOWFLAKE_DATABASE"],
-        schema=os.environ["SNOWFLAKE_RAW_SCHEMA"],
+        schema=os.environ["SNOWFLAKE_SCHEMA"],
     )
 
 
@@ -54,14 +56,35 @@ def load(csv_path: str) -> int:
     conn = get_conn()
     cur = conn.cursor()
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS RAW_KIKKOMAN_PRICES (
+            SCRAPE_RUN_ID  VARCHAR(36),
+            SHOP_NAME      VARCHAR(255),
+            PRODUCT_NAME   VARCHAR(500),
+            RAW_PRICE      VARCHAR(100),
+            CURRENCY       VARCHAR(10),
+            PRODUCT_URL    VARCHAR(2000),
+            SCRAPED_AT     TIMESTAMP_NTZ,
+            _LOADED_AT     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+        )
+    """)
+
+    # Add SCRAPE_RUN_ID if the table already existed without it
+    cur.execute("""
+        ALTER TABLE RAW_KIKKOMAN_PRICES
+        ADD COLUMN IF NOT EXISTS SCRAPE_RUN_ID VARCHAR(36)
+    """)
+
+    # Plain INSERT — every run always adds new rows regardless of price
     insert_sql = """
-        INSERT INTO KIKKOMAN_PRICES_RAW
-            (SHOP_NAME, PRODUCT_NAME, RAW_PRICE, CURRENCY, PRODUCT_URL, SCRAPED_AT, _LOADED_AT)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO RAW_KIKKOMAN_PRICES
+            (SCRAPE_RUN_ID, SHOP_NAME, PRODUCT_NAME, RAW_PRICE, CURRENCY, PRODUCT_URL, SCRAPED_AT, _LOADED_AT)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     data = [
         (
+            r["scrape_run_id"],
             r["shop_name"],
             r["product_name"],
             r["raw_price"],
@@ -75,10 +98,14 @@ def load(csv_path: str) -> int:
 
     cur.executemany(insert_sql, data)
     conn.commit()
+
+    db = os.environ["SNOWFLAKE_DATABASE"]
+    schema = os.environ["SNOWFLAKE_SCHEMA"]
+    print(f"Inserted {len(data)} rows into {db}.{schema}.RAW_KIKKOMAN_PRICES")
+    print(f"Scrape run ID: {data[0][0]}")
+
     cur.close()
     conn.close()
-
-    print(f"Loaded {len(data)} rows into RAW.KIKKOMAN_PRICES_RAW")
     return len(data)
 
 

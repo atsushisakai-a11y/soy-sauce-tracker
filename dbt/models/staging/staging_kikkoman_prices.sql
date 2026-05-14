@@ -30,7 +30,7 @@ WITH cleaned AS (
         'EUR'                                   AS currency,
         500                                     AS volume_ml
 
-    FROM {{ ref('bronze_kikkoman_prices') }}
+    FROM {{ ref('raw_kikkoman_prices') }}
     WHERE raw_price IS NOT NULL
       AND raw_price != ''
 

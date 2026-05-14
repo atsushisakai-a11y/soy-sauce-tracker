@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from typing import Optional
@@ -37,12 +38,13 @@ TIMEOUT = 15
 
 @dataclass
 class PriceRecord:
+    scrape_run_id: str        # unique ID per workflow run — all shops in one run share this
     shop_name: str
     product_name: str
-    raw_price: str           # exactly as shown on site, e.g. "€5,65"
+    raw_price: str            # exactly as shown on site, e.g. "€5.65"
     currency: str
     product_url: str
-    scraped_at: str          # ISO-8601 UTC
+    scraped_at: str           # ISO-8601 UTC — set once at run start, same for all shops
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +61,13 @@ def _get(url: str) -> Optional[requests.Response]:
         return None
 
 
-def _shopify_price(shop_name: str, product_url: str, json_url: str) -> Optional[PriceRecord]:
+def _shopify_price(
+    shop_name: str,
+    product_url: str,
+    json_url: str,
+    scrape_run_id: str,
+    scraped_at: str,
+) -> Optional[PriceRecord]:
     """Extract price from a Shopify product JSON endpoint."""
     r = _get(json_url)
     if not r:
@@ -75,16 +83,14 @@ def _shopify_price(shop_name: str, product_url: str, json_url: str) -> Optional[
     title = product.get("title", "Unknown")
     currency = data.get("currency", "EUR")
 
-    # Format as display price for consistency
-    raw_price = f"€{price_str}"
-
     return PriceRecord(
+        scrape_run_id=scrape_run_id,
         shop_name=shop_name,
         product_name=title,
-        raw_price=raw_price,
+        raw_price=f"€{price_str}",
         currency=currency,
         product_url=product_url,
-        scraped_at=datetime.now(timezone.utc).isoformat(),
+        scraped_at=scraped_at,
     )
 
 
@@ -93,6 +99,8 @@ def _html_price(
     product_url: str,
     product_name_override: str,
     price_selectors: list[tuple[str, dict]],
+    scrape_run_id: str,
+    scraped_at: str,
 ) -> Optional[PriceRecord]:
     """Extract price from HTML using schema.org or CSS selectors."""
     r = _get(product_url)
@@ -104,21 +112,20 @@ def _html_price(
     # 1. Try schema.org meta tag first (most reliable)
     meta_price = soup.find("meta", {"itemprop": "price"})
     if meta_price and meta_price.get("content"):
-        raw_price = f"€{meta_price['content']}"
         return PriceRecord(
+            scrape_run_id=scrape_run_id,
             shop_name=shop_name,
             product_name=product_name_override,
-            raw_price=raw_price,
+            raw_price=f"€{float(meta_price['content']):.2f}",
             currency="EUR",
             product_url=product_url,
-            scraped_at=datetime.now(timezone.utc).isoformat(),
+            scraped_at=scraped_at,
         )
 
     # 2. Try JSON-LD
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             ld = json.loads(script.string or "")
-            # handle both single object and list
             items = ld if isinstance(ld, list) else [ld]
             for item in items:
                 if item.get("@type") in ("Product", "Offer"):
@@ -128,12 +135,13 @@ def _html_price(
                     price = offer.get("price") or offer.get("lowPrice")
                     if price:
                         return PriceRecord(
+                            scrape_run_id=scrape_run_id,
                             shop_name=shop_name,
                             product_name=item.get("name", product_name_override),
-                            raw_price=f"€{price}",
+                            raw_price=f"€{float(price):.2f}",
                             currency=offer.get("priceCurrency", "EUR"),
                             product_url=product_url,
-                            scraped_at=datetime.now(timezone.utc).isoformat(),
+                            scraped_at=scraped_at,
                         )
         except (json.JSONDecodeError, AttributeError):
             continue
@@ -143,16 +151,16 @@ def _html_price(
         el = soup.find(selector, attrs) if attrs else soup.select_one(selector)
         if el:
             text = el.get_text(strip=True)
-            # keep only digits, comma, dot, €
             price_text = re.sub(r"[^\d,\.€]", "", text)
             if price_text:
                 return PriceRecord(
+                    scrape_run_id=scrape_run_id,
                     shop_name=shop_name,
                     product_name=product_name_override,
                     raw_price=price_text,
                     currency="EUR",
                     product_url=product_url,
-                    scraped_at=datetime.now(timezone.utc).isoformat(),
+                    scraped_at=scraped_at,
                 )
 
     log.error("%s: could not find price on %s", shop_name, product_url)
@@ -163,23 +171,27 @@ def _html_price(
 # Per-shop scrapers
 # ---------------------------------------------------------------------------
 
-def scrape_shilla() -> Optional[PriceRecord]:
+def scrape_shilla(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
     return _shopify_price(
         shop_name="Shilla Market",
         product_url="https://shillamarket.com/nl/products/kikkoman-koikuchi-shoyu-500ml",
         json_url="https://shillamarket.com/nl/products/kikkoman-koikuchi-shoyu-500ml.json",
+        scrape_run_id=scrape_run_id,
+        scraped_at=scraped_at,
     )
 
 
-def scrape_dunyong() -> Optional[PriceRecord]:
+def scrape_dunyong(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
     return _shopify_price(
         shop_name="Dun Yong",
         product_url="https://dunyong.com/products/naturally-brewed-soy-sauce-kikkoman-500ml",
         json_url="https://dunyong.com/products/naturally-brewed-soy-sauce-kikkoman-500ml.json",
+        scrape_run_id=scrape_run_id,
+        scraped_at=scraped_at,
     )
 
 
-def scrape_nikankitchen() -> Optional[PriceRecord]:
+def scrape_nikankitchen(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
     return _html_price(
         shop_name="NikanKitchen",
         product_url="https://www.nikankitchen.com/en/products/2611/kikkoman-shoyu-soy-sauce-500ml",
@@ -189,6 +201,8 @@ def scrape_nikankitchen() -> Optional[PriceRecord]:
             (".price", {}),
             ("[data-price]", {}),
         ],
+        scrape_run_id=scrape_run_id,
+        scraped_at=scraped_at,
     )
 
 
@@ -200,10 +214,17 @@ SCRAPERS = [scrape_shilla, scrape_dunyong, scrape_nikankitchen]
 
 
 def run() -> list[PriceRecord]:
+    # One run ID and one timestamp shared by all shops in this run
+    scrape_run_id = str(uuid.uuid4())
+    scraped_at = datetime.now(timezone.utc).isoformat()
+
+    log.info("Run ID : %s", scrape_run_id)
+    log.info("Run time: %s", scraped_at)
+
     records: list[PriceRecord] = []
     for scraper in SCRAPERS:
         log.info("Scraping %s …", scraper.__name__.replace("scrape_", ""))
-        record = scraper()
+        record = scraper(scrape_run_id=scrape_run_id, scraped_at=scraped_at)
         if record:
             records.append(record)
             log.info("  ✓ %s — %s", record.shop_name, record.raw_price)

@@ -1,8 +1,8 @@
 version: 2
 
 models:
-  - name: bronze_kikkoman_prices
-    description: "Bronze — typed view over raw scrape data, no transformations."
+  - name: raw_kikkoman_prices
+    description: "Raw — typed view over raw scrape data, no transformations."
     columns:
       - name: shop_name
         description: "Online shop name."

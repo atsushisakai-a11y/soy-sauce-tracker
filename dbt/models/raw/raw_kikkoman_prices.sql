@@ -6,6 +6,7 @@
 */
 
 SELECT
+    scrape_run_id::VARCHAR(36)    AS scrape_run_id,
     shop_name::VARCHAR(255)       AS shop_name,
     product_name::VARCHAR(500)    AS product_name,
     raw_price::VARCHAR(100)       AS raw_price,
@@ -14,4 +15,4 @@ SELECT
     scraped_at::TIMESTAMP_NTZ     AS scraped_at,
     _loaded_at::TIMESTAMP_NTZ     AS _loaded_at
 
-FROM {{ source('raw', 'kikkoman_prices_raw') }}
+FROM {{ source('raw', 'raw_kikkoman_prices') }}

@@ -32,5 +32,5 @@ SELECT
         2
     )                                           AS price_spread_pct
 
-FROM {{ ref('silver_kikkoman_prices') }}
+FROM {{ ref('staging_kikkoman_prices') }}
 GROUP BY 1, 2, 3, 4
