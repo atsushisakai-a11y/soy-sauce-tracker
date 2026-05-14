@@ -13,7 +13,7 @@ WITH cleaned AS (
         scrape_run_id,
         shop_name,
         product_name,
-        product_url,
+        SPLIT_PART(product_url, '?', 1)         AS product_url,
         scraped_at,
         _loaded_at,
         -- Strip €, EUR, whitespace; replace comma decimal separator with dot
