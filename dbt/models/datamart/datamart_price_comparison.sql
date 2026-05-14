@@ -2,10 +2,11 @@
 
 SELECT
     brand,
-    product_variant     AS product_name,
+    product_variant         AS product_name,
     shop_count,
-    min_price_eur,
-    max_price_eur,
-    avg_price_eur
+    MIN(price_eur)          AS min_price_eur,
+    MAX(price_eur)          AS max_price_eur,
+    AVG(price_eur)          AS avg_price_eur
 
 FROM {{ ref('fact_price') }}
+GROUP BY 1, 2, 3
