@@ -29,7 +29,10 @@ WITH cleaned AS (
             ) AS FLOAT
         )                                       AS price_eur,
         'EUR'                                   AS currency,
-        500                                     AS volume_ml
+        COALESCE(
+            TRY_CAST(REGEXP_SUBSTR(product_name, '(\\d+)\\s*[Mm][Ll]', 1, 1, 'e', 1) AS INTEGER),
+            500
+        )                                       AS volume_ml
 
     FROM {{ ref('raw_kikkoman_prices') }}
     WHERE raw_price IS NOT NULL
