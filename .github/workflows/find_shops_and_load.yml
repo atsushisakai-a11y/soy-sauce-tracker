@@ -1,0 +1,41 @@
+name: Find Amsterdam Asian Shops & Load to Snowflake
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"   # Every Monday at 03:00 UTC
+
+jobs:
+  find-and-load:
+    runs-on: ubuntu-latest
+
+    env:
+      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE:  price_monitoring
+      SNOWFLAKE_SCHEMA:    raw
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv snowflake-connector-python
+
+      - name: Find Amsterdam Asian shops
+        run: cd scraper && python find_shops.py
+
+      - name: Load shops to Snowflake
+        run: python loader/load_shops_to_snowflake.py scraper/output/amsterdam_asian_shops.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amsterdam-asian-shops-${{ github.run_id }}
+          path: scraper/output/amsterdam_asian_shops.csv
+          retention-days: 90
