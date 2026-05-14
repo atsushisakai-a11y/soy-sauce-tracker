@@ -1,11 +1,11 @@
 """
-Scraper for Kikkoman Koikuchi Shoyu 500ml across Dutch/Asian online shops.
+Scraper for Kikkoman Koikuchi Shoyu 500ml across Amsterdam Asian shops.
+Shop list is pulled dynamically from Snowflake staging.staging_shops.
 Outputs: scraper/output/kikkoman_prices_<timestamp>.csv
 
-Shops:
-  - Shilla Market   (Shopify JSON API)
-  - Dun Yong        (Shopify JSON API)
-  - NikanKitchen    (HTML / schema.org)
+Detection strategy per shop:
+  1. Shopify JSON API  (/products.json — search by title)
+  2. HTML search page  (common search URL patterns)
 """
 
 import csv
@@ -20,7 +20,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import requests
+import snowflake.connector
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -35,16 +39,45 @@ HEADERS = {
 }
 TIMEOUT = 15
 
+# Keywords used to match Kikkoman Koikuchi Shoyu 500ml in product titles
+KIKKOMAN_KEYWORDS = ["kikkoman"]
+SHOYU_KEYWORDS    = ["shoyu", "soy sauce", "sojasaus", "ketjap", "koikuchi"]
+SIZE_KEYWORDS     = ["500"]
+
 
 @dataclass
 class PriceRecord:
-    scrape_run_id: str        # unique ID per workflow run — all shops in one run share this
+    scrape_run_id: str
     shop_name: str
     product_name: str
-    raw_price: str            # exactly as shown on site, e.g. "€5.65"
+    raw_price: str
     currency: str
     product_url: str
-    scraped_at: str           # ISO-8601 UTC — set once at run start, same for all shops
+    scraped_at: str
+
+
+# ---------------------------------------------------------------------------
+# Snowflake
+# ---------------------------------------------------------------------------
+
+def get_shops_from_snowflake() -> list[dict]:
+    """Return list of {shop_name, website} from staging.staging_shops."""
+    conn = snowflake.connector.connect(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        password=os.environ["SNOWFLAKE_PASSWORD"],
+        role=os.environ.get("SNOWFLAKE_ROLE", ""),
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        database="price_monitoring",
+        schema="STAGING",
+    )
+    cur = conn.cursor()
+    cur.execute("SELECT shop_name, website FROM staging_shops WHERE website IS NOT NULL")
+    rows = [{"shop_name": r[0], "website": r[1].rstrip("/")} for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    log.info("Loaded %d shops from Snowflake staging_shops", len(rows))
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -57,180 +90,169 @@ def _get(url: str) -> Optional[requests.Response]:
         r.raise_for_status()
         return r
     except requests.RequestException as e:
-        log.error("GET %s failed: %s", url, e)
+        log.debug("GET %s failed: %s", url, e)
         return None
 
 
-def _shopify_price(
-    shop_name: str,
-    product_url: str,
-    json_url: str,
-    scrape_run_id: str,
-    scraped_at: str,
-) -> Optional[PriceRecord]:
-    """Extract price from a Shopify product JSON endpoint."""
-    r = _get(json_url)
-    if not r:
-        return None
-    data = r.json()
-    product = data.get("product", {})
-    variants = product.get("variants", [])
-    if not variants:
-        log.error("%s: no variants found in JSON", shop_name)
-        return None
-
-    price_str = variants[0].get("price", "")  # e.g. "5.65"
-    title = product.get("title", "Unknown")
-    currency = data.get("currency", "EUR")
-
-    return PriceRecord(
-        scrape_run_id=scrape_run_id,
-        shop_name=shop_name,
-        product_name=title,
-        raw_price=f"€{price_str}",
-        currency=currency,
-        product_url=product_url,
-        scraped_at=scraped_at,
+def _is_kikkoman_500(title: str) -> bool:
+    t = title.lower()
+    return (
+        any(k in t for k in KIKKOMAN_KEYWORDS)
+        and any(k in t for k in SHOYU_KEYWORDS)
+        and any(k in t for k in SIZE_KEYWORDS)
     )
 
 
-def _html_price(
-    shop_name: str,
-    product_url: str,
-    product_name_override: str,
-    price_selectors: list[tuple[str, dict]],
-    scrape_run_id: str,
-    scraped_at: str,
-) -> Optional[PriceRecord]:
-    """Extract price from HTML using schema.org or CSS selectors."""
-    r = _get(product_url)
+# ---------------------------------------------------------------------------
+# Shopify strategy
+# ---------------------------------------------------------------------------
+
+def _try_shopify(shop_name: str, base_url: str, scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
+    """Search Shopify /products.json for Kikkoman 500ml."""
+    url = f"{base_url}/products.json?limit=250"
+    r = _get(url)
     if not r:
         return None
+    try:
+        products = r.json().get("products", [])
+    except Exception:
+        return None
+    if not products:
+        return None  # not a Shopify store or empty catalogue
 
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    # 1. Try schema.org meta tag first (most reliable)
-    meta_price = soup.find("meta", {"itemprop": "price"})
-    if meta_price and meta_price.get("content"):
+    for product in products:
+        title = product.get("title", "")
+        if not _is_kikkoman_500(title):
+            continue
+        variants = product.get("variants", [])
+        if not variants:
+            continue
+        price = variants[0].get("price", "")
+        handle = product.get("handle", "")
+        product_url = f"{base_url}/products/{handle}"
         return PriceRecord(
             scrape_run_id=scrape_run_id,
             shop_name=shop_name,
-            product_name=product_name_override,
-            raw_price=f"€{float(meta_price['content']):.2f}",
+            product_name=title,
+            raw_price=f"€{price}",
             currency="EUR",
             product_url=product_url,
             scraped_at=scraped_at,
         )
+    return None
 
-    # 2. Try JSON-LD
-    for script in soup.find_all("script", {"type": "application/ld+json"}):
-        try:
-            ld = json.loads(script.string or "")
-            items = ld if isinstance(ld, list) else [ld]
-            for item in items:
-                if item.get("@type") in ("Product", "Offer"):
-                    offer = item.get("offers", item)
-                    if isinstance(offer, list):
-                        offer = offer[0]
-                    price = offer.get("price") or offer.get("lowPrice")
-                    if price:
-                        return PriceRecord(
-                            scrape_run_id=scrape_run_id,
-                            shop_name=shop_name,
-                            product_name=item.get("name", product_name_override),
-                            raw_price=f"€{float(price):.2f}",
-                            currency=offer.get("priceCurrency", "EUR"),
-                            product_url=product_url,
-                            scraped_at=scraped_at,
-                        )
-        except (json.JSONDecodeError, AttributeError):
+
+# ---------------------------------------------------------------------------
+# HTML search strategy
+# ---------------------------------------------------------------------------
+
+_SEARCH_PATTERNS = [
+    "{base}/search?type=product&q=kikkoman+shoyu+500",
+    "{base}/search?q=kikkoman+shoyu+500",
+    "{base}/zoeken?q=kikkoman",       # Dutch
+    "{base}/search?q=kikkoman",
+]
+
+
+def _try_html_search(shop_name: str, base_url: str, scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
+    """Try common search URLs and parse the first matching product result."""
+    for pattern in _SEARCH_PATTERNS:
+        url = pattern.format(base=base_url)
+        r = _get(url)
+        if not r:
             continue
 
-    # 3. Fallback: CSS selectors provided per shop
-    for selector, attrs in price_selectors:
-        el = soup.find(selector, attrs) if attrs else soup.select_one(selector)
-        if el:
-            text = el.get_text(strip=True)
-            price_text = re.sub(r"[^\d,\.€]", "", text)
-            if price_text:
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Look for product links whose anchor text matches Kikkoman 500ml
+        for a in soup.find_all("a", href=True):
+            text = a.get_text(strip=True)
+            if not _is_kikkoman_500(text):
+                continue
+
+            product_url = a["href"]
+            if not product_url.startswith("http"):
+                product_url = base_url + product_url
+
+            # Fetch the product page and extract price
+            pr = _get(product_url)
+            if not pr:
+                continue
+            prod_soup = BeautifulSoup(pr.text, "html.parser")
+
+            # schema.org meta tag
+            meta = prod_soup.find("meta", {"itemprop": "price"})
+            if meta and meta.get("content"):
                 return PriceRecord(
                     scrape_run_id=scrape_run_id,
                     shop_name=shop_name,
-                    product_name=product_name_override,
-                    raw_price=price_text,
+                    product_name=text,
+                    raw_price=f"€{float(meta['content']):.2f}",
                     currency="EUR",
                     product_url=product_url,
                     scraped_at=scraped_at,
                 )
 
-    log.error("%s: could not find price on %s", shop_name, product_url)
+            # JSON-LD
+            for script in prod_soup.find_all("script", {"type": "application/ld+json"}):
+                try:
+                    ld = json.loads(script.string or "")
+                    items = ld if isinstance(ld, list) else [ld]
+                    for item in items:
+                        if item.get("@type") in ("Product", "Offer"):
+                            offer = item.get("offers", item)
+                            if isinstance(offer, list):
+                                offer = offer[0]
+                            price = offer.get("price") or offer.get("lowPrice")
+                            if price:
+                                return PriceRecord(
+                                    scrape_run_id=scrape_run_id,
+                                    shop_name=shop_name,
+                                    product_name=item.get("name", text),
+                                    raw_price=f"€{float(price):.2f}",
+                                    currency=offer.get("priceCurrency", "EUR"),
+                                    product_url=product_url,
+                                    scraped_at=scraped_at,
+                                )
+                except (json.JSONDecodeError, AttributeError):
+                    continue
     return None
-
-
-# ---------------------------------------------------------------------------
-# Per-shop scrapers
-# ---------------------------------------------------------------------------
-
-def scrape_shilla(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
-    return _shopify_price(
-        shop_name="Shilla Market",
-        product_url="https://shillamarket.com/nl/products/kikkoman-koikuchi-shoyu-500ml",
-        json_url="https://shillamarket.com/nl/products/kikkoman-koikuchi-shoyu-500ml.json",
-        scrape_run_id=scrape_run_id,
-        scraped_at=scraped_at,
-    )
-
-
-def scrape_dunyong(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
-    return _shopify_price(
-        shop_name="Dun Yong",
-        product_url="https://dunyong.com/products/naturally-brewed-soy-sauce-kikkoman-500ml",
-        json_url="https://dunyong.com/products/naturally-brewed-soy-sauce-kikkoman-500ml.json",
-        scrape_run_id=scrape_run_id,
-        scraped_at=scraped_at,
-    )
-
-
-def scrape_nikankitchen(scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
-    return _html_price(
-        shop_name="NikanKitchen",
-        product_url="https://www.nikankitchen.com/en/products/2611/kikkoman-shoyu-soy-sauce-500ml",
-        product_name_override="Kikkoman Shoyu Soy Sauce 500ml",
-        price_selectors=[
-            ("span", {"class": re.compile(r"price", re.I)}),
-            (".price", {}),
-            ("[data-price]", {}),
-        ],
-        scrape_run_id=scrape_run_id,
-        scraped_at=scraped_at,
-    )
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-SCRAPERS = [scrape_shilla, scrape_dunyong, scrape_nikankitchen]
+def scrape_shop(shop_name: str, website: str, scrape_run_id: str, scraped_at: str) -> Optional[PriceRecord]:
+    record = _try_shopify(shop_name, website, scrape_run_id, scraped_at)
+    if record:
+        return record
+    return _try_html_search(shop_name, website, scrape_run_id, scraped_at)
 
 
 def run() -> list[PriceRecord]:
-    # One run ID and one timestamp shared by all shops in this run
     scrape_run_id = str(uuid.uuid4())
     scraped_at = datetime.now(timezone.utc).isoformat()
 
     log.info("Run ID : %s", scrape_run_id)
     log.info("Run time: %s", scraped_at)
 
+    shops = get_shops_from_snowflake()
     records: list[PriceRecord] = []
-    for scraper in SCRAPERS:
-        log.info("Scraping %s …", scraper.__name__.replace("scrape_", ""))
-        record = scraper(scrape_run_id=scrape_run_id, scraped_at=scraped_at)
+
+    for shop in shops:
+        shop_name = shop["shop_name"]
+        website   = shop["website"]
+        log.info("Scraping %s (%s) …", shop_name, website)
+        record = scrape_shop(shop_name, website, scrape_run_id, scraped_at)
         if record:
             records.append(record)
-            log.info("  ✓ %s — %s", record.shop_name, record.raw_price)
+            log.info("  ✓ %s — %s", shop_name, record.raw_price)
         else:
-            log.warning("  ✗ %s — skipped", scraper.__name__)
-        time.sleep(1)  # polite delay between requests
+            log.info("  – %s — Kikkoman 500ml not found", shop_name)
+        time.sleep(1)
+
+    log.info("Found prices in %d / %d shops", len(records), len(shops))
     return records
 
 
@@ -253,4 +275,4 @@ if __name__ == "__main__":
     if results:
         save_csv(results)
     else:
-        log.error("No records scraped — check shop pages for changes.")
+        log.warning("No Kikkoman 500ml prices found across all shops.")
