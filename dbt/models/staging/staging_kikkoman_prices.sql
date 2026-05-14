@@ -10,6 +10,7 @@
 WITH cleaned AS (
 
     SELECT
+        scrape_run_id,
         shop_name,
         product_name,
         product_url,
@@ -37,6 +38,7 @@ WITH cleaned AS (
 )
 
 SELECT
+    scrape_run_id,
     shop_name,
     'Kikkoman'                                  AS brand,
     'Koikuchi Shoyu'                            AS product_variant,
