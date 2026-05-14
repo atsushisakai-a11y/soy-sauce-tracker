@@ -29,6 +29,7 @@ market AS (
 SELECT
     -- Keys
     s.scrape_run_id,
+    s.product_id,
     {{ dbt_utils.generate_surrogate_key(['s.shop_name', 's.brand', 's.product_variant', 's.volume_ml']) }}
                                                     AS price_dim_key,
 
