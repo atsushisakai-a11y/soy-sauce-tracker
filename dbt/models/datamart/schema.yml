@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: dm_price_comparison
+  - name: datamart_price_comparison
     description: >
       Datamart — final price comparison view for the Kikkoman proposal.
       One row per shop per scrape date, enriched with market benchmarks,
