@@ -42,7 +42,7 @@ WITH cleaned AS (
 
 SELECT
     scrape_run_id,
-    {{ dbt_utils.generate_surrogate_key(['product_name', 'shop_name', 'volume_ml', 'product_url']) }}
+    {{ dbt_utils.generate_surrogate_key(['product_name', 'shop_name', 'volume_ml']) }}
                                                 AS product_id,
     shop_name,
     product_name,
