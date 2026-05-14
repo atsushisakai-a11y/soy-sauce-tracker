@@ -2,7 +2,7 @@
 
 SELECT
     d.brand,
-    d.product_variant         AS product_name,
+    d.product_name,
     COUNT(DISTINCT d.shop_name) AS shop_count,
     MIN(f.price_eur)          AS min_price_eur,
     MAX(f.price_eur)          AS max_price_eur,
