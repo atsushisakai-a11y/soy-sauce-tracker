@@ -27,7 +27,7 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
-      - name: Check RAW_SHOPS table in Snowflake
+      - name: Check RAW_OSM_SHOPS table in Snowflake
         run: |
           python - <<'EOF'
           import os, snowflake.connector
@@ -41,13 +41,13 @@ jobs:
               schema="RAW",
           )
           cur = conn.cursor()
-          cur.execute("SHOW TABLES LIKE 'RAW_SHOPS' IN SCHEMA price_monitoring.RAW")
+          cur.execute("SHOW TABLES LIKE 'RAW_OSM_SHOPS' IN SCHEMA price_monitoring.RAW")
           tables = cur.fetchall()
           print("Tables found:", tables)
           if tables:
-              cur.execute("DESCRIBE TABLE price_monitoring.RAW.RAW_SHOPS")
+              cur.execute("DESCRIBE TABLE price_monitoring.RAW.RAW_OSM_SHOPS")
               print("Columns:", [r[0] for r in cur.fetchall()])
-              cur.execute("SELECT COUNT(*) FROM price_monitoring.RAW.RAW_SHOPS")
+              cur.execute("SELECT COUNT(*) FROM price_monitoring.RAW.RAW_OSM_SHOPS")
               print("Row count:", cur.fetchone()[0])
           conn.close()
           EOF

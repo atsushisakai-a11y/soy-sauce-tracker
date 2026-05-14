@@ -1,5 +1,5 @@
 """
-Load amsterdam_asian_shops.csv into Snowflake price_monitoring.raw.RAW_SHOPS.
+Load amsterdam_asian_shops.csv into Snowflake price_monitoring.raw.RAW_OSM_SHOPS.
 Replaces all rows on every run (full refresh) — the shop list is a snapshot.
 
 Usage:
@@ -56,7 +56,7 @@ def load(csv_path: str) -> int:
     cur = conn.cursor()
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS RAW_SHOPS (
+        CREATE TABLE IF NOT EXISTS RAW_OSM_SHOPS (
             NAME        VARCHAR(500),
             ADDRESS     VARCHAR(1000),
             WEBSITE     VARCHAR(2000),
@@ -70,10 +70,10 @@ def load(csv_path: str) -> int:
     """)
 
     # Full refresh — delete all rows then re-insert
-    cur.execute("DELETE FROM RAW_SHOPS")
+    cur.execute("DELETE FROM RAW_OSM_SHOPS")
 
     insert_sql = """
-        INSERT INTO RAW_SHOPS
+        INSERT INTO RAW_OSM_SHOPS
             (NAME, ADDRESS, WEBSITE, PHONE, CUISINE, SHOP_TYPE, OSM_ID, OSM_TYPE, _LOADED_AT)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
@@ -98,7 +98,7 @@ def load(csv_path: str) -> int:
 
     db = os.environ["SNOWFLAKE_DATABASE"]
     schema = os.environ["SNOWFLAKE_SCHEMA"]
-    print(f"Inserted {len(data)} rows into {db}.{schema}.RAW_SHOPS")
+    print(f"Inserted {len(data)} rows into {db}.{schema}.RAW_OSM_SHOPS")
 
     cur.close()
     conn.close()

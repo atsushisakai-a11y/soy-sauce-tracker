@@ -6,7 +6,7 @@ sources:
     schema: RAW
     description: "Raw landing zone — data loaded directly from the scraper CSV."
     tables:
-      - name: RAW_SHOPS
+      - name: RAW_OSM_SHOPS
         description: "Amsterdam Asian shops discovered via OpenStreetMap — full refresh on every run."
         columns:
           - name: NAME
