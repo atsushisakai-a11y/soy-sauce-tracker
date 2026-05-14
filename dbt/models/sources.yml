@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw
-    database: KIKKOMAN_DB
+    database: price_monitoring
     schema: RAW
     description: "Raw landing zone — data loaded directly from the scraper CSV."
     tables:
