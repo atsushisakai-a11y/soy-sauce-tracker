@@ -24,3 +24,4 @@ WHERE website IS NOT NULL
     OR LOWER(cuisine) LIKE '%thai%'
     OR LOWER(cuisine) LIKE '%vietnamese%'
   )
+  AND LOWER(shop_type) IN ('convenience', 'supermarket', 'toko')
