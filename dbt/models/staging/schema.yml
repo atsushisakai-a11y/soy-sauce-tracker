@@ -17,8 +17,9 @@ models:
         tests:
           - not_null
           - dbt_utils.accepted_range:
-              min_value: 0.01
-              max_value: 50.0
+              arguments:
+                min_value: 0.01
+                max_value: 50.0
       - name: price_per_100ml_eur
         tests: [not_null]
       - name: currency
