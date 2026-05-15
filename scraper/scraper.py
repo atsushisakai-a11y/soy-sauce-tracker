@@ -43,10 +43,22 @@ KIKKOMAN_KEYWORDS = ["kikkoman"]
 SHOYU_KEYWORDS    = ["shoyu", "soy sauce", "sojasaus", "koikuchi"]
 
 SHOPS = [
-    {"shop_name": "NikanKitchen",      "website": "https://www.nikankitchen.com"},
-    {"shop_name": "Shilla Market",     "website": "https://shillamarket.com"},
-    {"shop_name": "Oriental Webshop",  "website": "https://www.orientalwebshop.nl"},
-    {"shop_name": "Dun Yong",          "website": "https://dunyong.com"},
+    # Asian specialty shops
+    {"shop_name": "NikanKitchen",       "website": "https://www.nikankitchen.com"},
+    {"shop_name": "Shilla Market",      "website": "https://shillamarket.com"},
+    {"shop_name": "Oriental Webshop",   "website": "https://www.orientalwebshop.nl"},
+    {"shop_name": "Dun Yong",           "website": "https://dunyong.com"},
+    {"shop_name": "Amazing Oriental",   "website": "https://amazingoriental.com"},
+    {"shop_name": "Wah Nam Hong",       "website": "https://www.wah-nam-hong.nl"},
+    {"shop_name": "Tjin's Toko",        "website": "https://tjinstoko.eu"},
+    {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
+    # Dutch supermarkets
+    {"shop_name": "Albert Heijn",       "website": "https://www.ah.nl"},
+    {"shop_name": "Jumbo",              "website": "https://www.jumbo.com"},
+    {"shop_name": "PLUS",               "website": "https://www.plus.nl"},
+    {"shop_name": "Picnic",             "website": "https://picnic.app"},
+    # Marketplace
+    {"shop_name": "Bol.com",            "website": "https://www.bol.com"},
 ]
 
 
@@ -154,6 +166,10 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
     search_urls = [
         f"{base_url}/search?type=product&q=kikkoman+{size}ml",
         f"{base_url}/search?q=kikkoman+{size}ml",
+        f"{base_url}/zoeken?query=kikkoman+sojasaus+{size}ml",   # Albert Heijn
+        f"{base_url}/zoeken?searchTerms=kikkoman+{size}ml",      # Jumbo
+        f"{base_url}/search?q=kikkoman+sojasaus&searchType=products",  # PLUS
+        f"{base_url}/nl/nl/s/?searchtext=kikkoman+sojasaus+{size}ml",  # Bol.com
         f"{base_url}/zoeken?q=kikkoman",
         f"{base_url}/search?q=kikkoman",
     ]
