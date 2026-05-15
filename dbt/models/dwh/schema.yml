@@ -2,14 +2,29 @@ version: 2
 
 models:
   - name: dim_price
-    description: "Dimension table — one row per shop × product combination."
+    description: "Dimension table — one row per shop × product combination. Captures descriptive attributes that do not change per scrape run."
     columns:
+      - name: product_id
+        description: "Surrogate key hashed from product_name, shop_name, and volume_ml."
+        tests: [not_null, unique]
       - name: shop_name
+        description: "Name of the online shop (e.g. Shilla Market, Dun Yong)."
+        tests: [not_null]
+      - name: product_name
+        description: "Product title exactly as scraped from the shop website (e.g. Koikuchi Shoyu 500ML)."
         tests: [not_null]
       - name: brand
+        description: "Brand name — always Kikkoman."
         tests: [not_null]
+      - name: product_variant
+        description: "Product variant category (e.g. Koikuchi Shoyu)."
       - name: volume_ml
+        description: "Product volume in millilitres, parsed from the product name (e.g. 500, 150)."
         tests: [not_null]
+      - name: currency
+        description: "Currency code — always EUR."
+      - name: product_url
+        description: "Direct URL to the product page on the shop website, with query string stripped."
 
   - name: fact_price
     description: "Fact table — one row per shop per scrape run with price."
