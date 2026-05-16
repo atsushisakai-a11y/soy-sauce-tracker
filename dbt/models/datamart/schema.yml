@@ -4,6 +4,8 @@ models:
   - name: datamart_price_comparison
     description: "Datamart — market price summary for Kikkoman Koikuchi Shoyu 500ml."
     columns:
+      - name: scrape_date
+        tests: [not_null]
       - name: brand
         tests: [not_null]
       - name: product_name
