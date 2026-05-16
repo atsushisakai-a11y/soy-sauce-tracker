@@ -1,4 +1,7 @@
-{{ config(materialized='table') }}
+{{ config(
+    materialized='incremental',
+    unique_key=['scrape_run_id', 'product_id']
+) }}
 
 SELECT
     scrape_run_id,
@@ -7,3 +10,7 @@ SELECT
     DATE(scraped_at)    AS scrape_date
 
 FROM {{ ref('staging_prices') }}
+
+{% if is_incremental() %}
+WHERE scraped_at > (SELECT MAX(scrape_date) FROM {{ this }})
+{% endif %}

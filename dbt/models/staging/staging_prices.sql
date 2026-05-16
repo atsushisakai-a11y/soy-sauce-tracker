@@ -1,4 +1,7 @@
-{{ config(materialized='table') }}
+{{ config(
+    materialized='incremental',
+    unique_key=['scrape_run_id', 'product_id']
+) }}
 
 /*
   Silver layer — cleaned and standardised prices.
@@ -37,6 +40,10 @@ WITH cleaned AS (
     FROM {{ ref('raw_kikkoman_prices') }}
     WHERE raw_price IS NOT NULL
       AND raw_price != ''
+
+    {% if is_incremental() %}
+      AND scraped_at > (SELECT MAX(scraped_at) FROM {{ this }})
+    {% endif %}
 
 )
 
