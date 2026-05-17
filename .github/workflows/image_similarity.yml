@@ -1,0 +1,30 @@
+name: Compute - Image Similarity Scores
+
+on:
+  workflow_dispatch:
+
+jobs:
+  image-similarity:
+    runs-on: ubuntu-latest
+
+    env:
+      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE:  price_monitoring
+      SNOWFLAKE_SCHEMA:    STAGING
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install snowflake-connector-python python-dotenv imagehash Pillow requests
+
+      - name: Compute image similarity scores
+        run: python similarity/image_similarity.py
