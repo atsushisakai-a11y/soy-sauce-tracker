@@ -17,6 +17,7 @@ WITH cleaned AS (
         shop_name,
         product_name,
         SPLIT_PART(product_url, '?', 1)         AS product_url,
+        image_url,
         scraped_at,
         _loaded_at,
         -- Strip €, EUR, whitespace; replace comma decimal separator with dot
@@ -60,6 +61,7 @@ SELECT
     ROUND(price_eur / volume_ml * 100, 4)       AS price_per_100ml_eur,
     currency,
     product_url,
+    image_url,
     scraped_at,
     _loaded_at
 
