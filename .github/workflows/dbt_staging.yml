@@ -2,6 +2,11 @@ name: dbt - Run Staging Model
 
 on:
   workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: "Full refresh (rebuilds table from scratch — use when columns are added)"
+        type: boolean
+        default: false
 
 jobs:
   dbt-staging:
@@ -28,7 +33,10 @@ jobs:
         run: cd dbt && dbt deps
 
       - name: dbt run - staging_prices
-        run: cd dbt && dbt run --select staging_prices
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.full_refresh }}" = "true" ]; then FLAGS="--full-refresh"; fi
+          cd dbt && dbt run $FLAGS --select staging_prices
 
       - name: dbt test - staging_prices
         run: cd dbt && dbt test --select staging_prices
