@@ -70,6 +70,7 @@ class PriceRecord:
     raw_price: str
     currency: str
     product_url: str
+    image_url: str
     scraped_at: str
 
 
@@ -96,7 +97,7 @@ def _is_kikkoman_target(title: str, size: str) -> bool:
     )
 
 
-def _make_record(shop_name, product_name, raw_price, currency, product_url, scrape_run_id, scraped_at) -> PriceRecord:
+def _make_record(shop_name, product_name, raw_price, currency, product_url, image_url, scrape_run_id, scraped_at) -> PriceRecord:
     return PriceRecord(
         scrape_run_id=scrape_run_id,
         shop_name=shop_name,
@@ -104,6 +105,7 @@ def _make_record(shop_name, product_name, raw_price, currency, product_url, scra
         raw_price=raw_price,
         currency=currency,
         product_url=product_url,
+        image_url=image_url or "",
         scraped_at=scraped_at,
     )
 
@@ -131,7 +133,10 @@ def _try_shopify(shop_name: str, base_url: str, size: str, scrape_run_id: str, s
             product_url = product.get("url", "")
             if product_url and not product_url.startswith("http"):
                 product_url = base_url + product_url
-            return _make_record(shop_name, title, f"€{price}" if price else "", "EUR", product_url, scrape_run_id, scraped_at)
+            image_url = product.get("featured_image", {})
+            if isinstance(image_url, dict):
+                image_url = image_url.get("url", "")
+            return _make_record(shop_name, title, f"€{price}" if price else "", "EUR", product_url, image_url, scrape_run_id, scraped_at)
 
     # Strategy 2: products.json (first 250)
     r = _get(f"{base_url}/products.json?limit=250")
@@ -153,7 +158,9 @@ def _try_shopify(shop_name: str, base_url: str, size: str, scrape_run_id: str, s
             continue
         price = variants[0].get("price", "")
         product_url = f"{base_url}/products/{product.get('handle', '')}"
-        return _make_record(shop_name, title, f"€{price}", "EUR", product_url, scrape_run_id, scraped_at)
+        images = product.get("images", [])
+        image_url = images[0].get("src", "") if images else ""
+        return _make_record(shop_name, title, f"€{price}", "EUR", product_url, image_url, scrape_run_id, scraped_at)
 
     return None
 
@@ -190,9 +197,12 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
                 continue
             prod_soup = BeautifulSoup(pr.text, "html.parser")
 
+            og_image = prod_soup.find("meta", {"property": "og:image"})
+            page_image_url = og_image.get("content", "") if og_image else ""
+
             meta = prod_soup.find("meta", {"itemprop": "price"})
             if meta and meta.get("content"):
-                return _make_record(shop_name, text, f"€{float(meta['content']):.2f}", "EUR", product_url, scrape_run_id, scraped_at)
+                return _make_record(shop_name, text, f"€{float(meta['content']):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
 
             for script in prod_soup.find_all("script", {"type": "application/ld+json"}):
                 try:
@@ -205,11 +215,15 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
                                 offer = offer[0]
                             price = offer.get("price") or offer.get("lowPrice")
                             if price:
+                                ld_image = item.get("image", "")
+                                if isinstance(ld_image, list):
+                                    ld_image = ld_image[0]
                                 return _make_record(
                                     shop_name, item.get("name", text),
                                     f"€{float(price):.2f}",
                                     offer.get("priceCurrency", "EUR"),
-                                    product_url, scrape_run_id, scraped_at,
+                                    product_url, ld_image or page_image_url,
+                                    scrape_run_id, scraped_at,
                                 )
                 except (json.JSONDecodeError, AttributeError):
                     continue

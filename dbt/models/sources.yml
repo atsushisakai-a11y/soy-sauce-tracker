@@ -43,6 +43,8 @@ sources:
             description: "Currency code, typically EUR."
           - name: product_url
             description: "Direct URL to the product page."
+          - name: image_url
+            description: "URL of the product image."
           - name: scraped_at
             description: "UTC timestamp when the scraper fetched this price."
           - name: _loaded_at

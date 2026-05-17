@@ -12,6 +12,7 @@ SELECT
     raw_price::VARCHAR(100)       AS raw_price,
     currency::VARCHAR(10)         AS currency,
     product_url::VARCHAR(2000)    AS product_url,
+    image_url::VARCHAR(2000)      AS image_url,
     scraped_at::TIMESTAMP_NTZ     AS scraped_at,
     _loaded_at::TIMESTAMP_NTZ     AS _loaded_at
 

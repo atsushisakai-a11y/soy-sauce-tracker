@@ -64,22 +64,27 @@ def load(csv_path: str) -> int:
             RAW_PRICE      VARCHAR(100),
             CURRENCY       VARCHAR(10),
             PRODUCT_URL    VARCHAR(2000),
+            IMAGE_URL      VARCHAR(2000),
             SCRAPED_AT     TIMESTAMP_NTZ,
             _LOADED_AT     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
         )
     """)
 
-    # Add SCRAPE_RUN_ID if the table already existed without it
     cur.execute("""
         ALTER TABLE RAW_KIKKOMAN_PRICES
         ADD COLUMN IF NOT EXISTS SCRAPE_RUN_ID VARCHAR(36)
     """)
 
+    cur.execute("""
+        ALTER TABLE RAW_KIKKOMAN_PRICES
+        ADD COLUMN IF NOT EXISTS IMAGE_URL VARCHAR(2000)
+    """)
+
     # Plain INSERT — every run always adds new rows regardless of price
     insert_sql = """
         INSERT INTO RAW_KIKKOMAN_PRICES
-            (SCRAPE_RUN_ID, SHOP_NAME, PRODUCT_NAME, RAW_PRICE, CURRENCY, PRODUCT_URL, SCRAPED_AT, _LOADED_AT)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (SCRAPE_RUN_ID, SHOP_NAME, PRODUCT_NAME, RAW_PRICE, CURRENCY, PRODUCT_URL, IMAGE_URL, SCRAPED_AT, _LOADED_AT)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     data = [
@@ -90,6 +95,7 @@ def load(csv_path: str) -> int:
             r["raw_price"],
             r["currency"],
             r["product_url"],
+            r.get("image_url", ""),
             r["scraped_at"],
             loaded_at,
         )
