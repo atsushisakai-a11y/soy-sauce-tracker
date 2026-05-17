@@ -26,3 +26,21 @@ models:
         tests:
           - accepted_values:
               values: ["EUR"]
+
+  - name: staging_similarity_scores
+    description: "Pairwise product image similarity scores, one row per product pair per scrape date."
+    columns:
+      - name: scrape_date
+        tests: [not_null]
+      - name: shop_name_1
+        tests: [not_null]
+      - name: shop_name_2
+        tests: [not_null]
+      - name: product_name_1
+        tests: [not_null]
+      - name: product_name_2
+        tests: [not_null]
+      - name: similarity_score
+        tests: [not_null]
+      - name: computed_at
+        tests: [not_null]

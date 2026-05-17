@@ -47,3 +47,21 @@ sources:
             description: "UTC timestamp when the scraper fetched this price."
           - name: _loaded_at
             description: "UTC timestamp when the row was inserted into Snowflake."
+
+      - name: RAW_SIMILARITY_SCORES
+        description: "Pairwise image similarity scores computed by image_similarity.py."
+        columns:
+          - name: scrape_date
+            description: "Date of the scrape run both products belong to."
+          - name: shop_name_1
+            description: "Shop name for the first product in the pair."
+          - name: shop_name_2
+            description: "Shop name for the second product in the pair."
+          - name: product_name_1
+            description: "Product name for the first product in the pair."
+          - name: product_name_2
+            description: "Product name for the second product in the pair."
+          - name: similarity_score
+            description: "Perceptual hash similarity score (0.0–1.0, higher = more similar)."
+          - name: computed_at
+            description: "UTC timestamp when the similarity score was computed."
