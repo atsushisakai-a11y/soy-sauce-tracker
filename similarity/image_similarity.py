@@ -73,7 +73,7 @@ def fetch_products(cur):
     """Return all products from staging_prices that have a non-empty image_url."""
     cur.execute("""
         SELECT
-            scrape_date,
+            DATE(scraped_at) AS scrape_date,
             brand,
             shop_name,
             product_name,
