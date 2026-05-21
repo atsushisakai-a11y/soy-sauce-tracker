@@ -141,6 +141,14 @@ def run():
 
     ensure_table(cur)
 
+    # Remove any same-shop pairs inserted before this filter was added
+    cur.execute("""
+        DELETE FROM STAGING_SIMILARITY_SCORES
+        WHERE SHOP_NAME_1 = SHOP_NAME_2
+    """)
+    conn.commit()
+    log.info("Removed same-shop pairs from STAGING_SIMILARITY_SCORES.")
+
     rows = fetch_products(cur)
     if not rows:
         log.info("No products with image_url found in STAGING_PRICES.")
