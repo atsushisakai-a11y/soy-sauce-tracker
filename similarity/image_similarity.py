@@ -144,7 +144,11 @@ def get_embedding(img: Image.Image) -> np.ndarray:
     """Return a normalised CLIP image embedding as a 1-D numpy array."""
     inputs = _PROCESSOR(images=img, return_tensors="pt")
     with torch.no_grad():
-        features = _MODEL.get_image_features(**inputs)
+        # Pass only pixel_values to avoid unexpected keyword arguments
+        features = _MODEL.get_image_features(pixel_values=inputs["pixel_values"])
+    # Some transformers versions return BaseModelOutputWithPooling instead of a tensor
+    if not isinstance(features, torch.Tensor):
+        features = features.pooler_output
     features = features / features.norm(dim=-1, keepdim=True)
     return features[0].cpu().numpy()
 
