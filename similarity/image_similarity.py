@@ -181,11 +181,13 @@ def run():
             log.info("  Not enough images to compare, skipping.")
             continue
 
-        # Compute pairwise similarity
+        # Compute pairwise similarity (cross-shop only)
         insert_rows = []
         for (key_a, img_a), (key_b, img_b) in itertools.combinations(images.items(), 2):
             shop_a, name_a, url_a = key_a
             shop_b, name_b, url_b = key_b
+            if shop_a == shop_b:
+                continue
             score = compute_similarity(img_a, img_b)
             log.info("  %.4f  %s vs %s", score, name_a, name_b)
             insert_rows.append((
