@@ -1,4 +1,4 @@
-name: dbt - Run Staging Shops
+name: 91. dbt - Run Staging Shops
 
 on:
   workflow_dispatch:

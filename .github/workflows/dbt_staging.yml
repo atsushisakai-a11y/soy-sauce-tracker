@@ -1,4 +1,4 @@
-name: dbt - Run Staging Model
+name: 2. dbt - Run Staging Model
 
 on:
   workflow_dispatch:

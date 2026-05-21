@@ -1,4 +1,4 @@
-name: Find Amsterdam Asian Shops & Load to Snowflake
+name: 90. Find Amsterdam Asian Shops & Load to Snowflake
 
 on:
   workflow_dispatch:
