@@ -4,12 +4,15 @@ Compute pairwise image similarity scores for Kikkoman products.
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
   2. For each (scrape_date, brand) group, download product images and compute
-     perceptual hash (pHash) similarity for every product pair
+     CLIP embedding cosine similarity for every cross-shop product pair
   3. Write results to STAGING.STAGING_SIMILARITY_SCORES (incremental — skips
      scrape_dates already present in the target table)
 
+CLIP (clip-ViT-B-32) understands visual semantics — bottle shape, label
+content, proportions — giving far more meaningful scores than pHash.
+
 Usage:
-    pip install snowflake-connector-python python-dotenv imagehash Pillow requests
+    pip install snowflake-connector-python python-dotenv sentence-transformers Pillow requests
     python similarity/image_similarity.py
 """
 
@@ -20,11 +23,12 @@ import logging
 import os
 from datetime import datetime, timezone
 
-import imagehash
+import numpy as np
 import requests
 import snowflake.connector
 from dotenv import load_dotenv
 from PIL import Image
+from sentence_transformers import SentenceTransformer
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -39,7 +43,11 @@ HEADERS = {
     )
 }
 TIMEOUT = 15
-PHASH_BITS = 64  # default pHash produces a 64-bit hash
+
+# Load CLIP model once at startup (~350 MB download on first run)
+log.info("Loading CLIP model…")
+_CLIP = SentenceTransformer("clip-ViT-B-32")
+log.info("CLIP model ready.")
 
 
 def get_conn():
@@ -128,11 +136,15 @@ def download_image(url: str):
         return None
 
 
-def compute_similarity(img_a, img_b) -> float:
-    hash_a = imagehash.phash(img_a)
-    hash_b = imagehash.phash(img_b)
-    distance = hash_a - hash_b
-    return round(1.0 - distance / PHASH_BITS, 4)
+def compute_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
+    """Compute cosine similarity between CLIP embeddings of two images.
+    Score range: 0.0 (completely different) to 1.0 (identical).
+    """
+    embeddings = _CLIP.encode([img_a, img_b], convert_to_numpy=True)
+    # Embeddings are L2-normalised by sentence-transformers, so dot product = cosine similarity
+    score = float(np.dot(embeddings[0], embeddings[1]))
+    # Clamp to [0, 1] — cosine similarity can be slightly negative for very dissimilar images
+    return round(max(0.0, min(1.0, score)), 4)
 
 
 def run():
@@ -189,7 +201,7 @@ def run():
             log.info("  Not enough images to compare, skipping.")
             continue
 
-        # Compute pairwise similarity (cross-shop only)
+        # Compute pairwise CLIP similarity (cross-shop only)
         insert_rows = []
         for (key_a, img_a), (key_b, img_b) in itertools.combinations(images.items(), 2):
             shop_a, name_a, url_a = key_a
