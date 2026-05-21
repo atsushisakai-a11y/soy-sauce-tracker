@@ -8,11 +8,13 @@ Flow:
   3. Write results to STAGING.STAGING_SIMILARITY_SCORES (incremental — skips
      scrape_dates already present in the target table)
 
-CLIP (clip-ViT-B-32) understands visual semantics — bottle shape, label
-content, proportions — giving far more meaningful scores than pHash.
+CLIP (openai/clip-vit-base-patch32) understands visual semantics — bottle
+shape, label content, proportions — giving far more meaningful scores than
+perceptual hashing which only sees brightness patterns.
 
 Usage:
-    pip install snowflake-connector-python python-dotenv sentence-transformers Pillow requests
+    pip install snowflake-connector-python python-dotenv \
+                transformers torch Pillow requests numpy
     python similarity/image_similarity.py
 """
 
@@ -26,9 +28,10 @@ from datetime import datetime, timezone
 import numpy as np
 import requests
 import snowflake.connector
+import torch
 from dotenv import load_dotenv
 from PIL import Image
-from sentence_transformers import SentenceTransformer
+from transformers import CLIPModel, CLIPProcessor
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -43,10 +46,13 @@ HEADERS = {
     )
 }
 TIMEOUT = 15
+CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
 
 # Load CLIP model once at startup (~350 MB download on first run)
 log.info("Loading CLIP model…")
-_CLIP = SentenceTransformer("clip-ViT-B-32")
+_PROCESSOR = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
+_MODEL = CLIPModel.from_pretrained(CLIP_MODEL_NAME)
+_MODEL.eval()
 log.info("CLIP model ready.")
 
 
@@ -97,21 +103,19 @@ def fetch_products(cur):
 
 def fetch_processed_dates(cur):
     """Return scrape_dates where ALL pairs were successfully computed.
-    A date is considered complete only if the number of rows matches
-    the expected C(n,2) combinations. We re-process incomplete dates."""
+    A date is considered complete only if the number of rows > 1.
+    Single-pair dates may be incomplete due to image download failures."""
     cur.execute("""
         SELECT scrape_date, COUNT(*) AS pair_count
         FROM STAGING_SIMILARITY_SCORES
         GROUP BY scrape_date
     """)
     rows = cur.fetchall()
-    # Only skip dates that have more than 1 pair — single-pair dates may be
-    # incomplete due to image download failures on previous runs.
     return {row[0] for row in rows if row[1] > 1}
 
 
 def _clean_image_url(url: str) -> str:
-    """Extract a plain URL from image_url values that were stored as JSON-LD ImageObject strings."""
+    """Extract a plain URL from image_url values stored as JSON-LD ImageObject strings."""
     if not url:
         return ""
     if url.startswith("http"):
@@ -136,14 +140,21 @@ def download_image(url: str):
         return None
 
 
+def get_embedding(img: Image.Image) -> np.ndarray:
+    """Return a normalised CLIP image embedding as a 1-D numpy array."""
+    inputs = _PROCESSOR(images=img, return_tensors="pt")
+    with torch.no_grad():
+        features = _MODEL.get_image_features(**inputs)
+    features = features / features.norm(dim=-1, keepdim=True)
+    return features[0].cpu().numpy()
+
+
 def compute_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
-    """Compute cosine similarity between CLIP embeddings of two images.
-    Score range: 0.0 (completely different) to 1.0 (identical).
-    """
-    embeddings = _CLIP.encode([img_a, img_b], convert_to_numpy=True)
-    # Embeddings are L2-normalised by sentence-transformers, so dot product = cosine similarity
-    score = float(np.dot(embeddings[0], embeddings[1]))
-    # Clamp to [0, 1] — cosine similarity can be slightly negative for very dissimilar images
+    """Cosine similarity between CLIP embeddings of two images (0.0 – 1.0)."""
+    emb_a = get_embedding(img_a)
+    emb_b = get_embedding(img_b)
+    score = float(np.dot(emb_a, emb_b))
+    # Clamp to [0, 1] — cosine can be slightly negative for very dissimilar images
     return round(max(0.0, min(1.0, score)), 4)
 
 

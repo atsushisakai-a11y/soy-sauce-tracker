@@ -24,7 +24,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install snowflake-connector-python python-dotenv sentence-transformers Pillow requests numpy
+        run: |
+          pip install snowflake-connector-python python-dotenv Pillow requests numpy
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers
 
       - name: Compute image similarity scores
         run: python similarity/image_similarity.py
