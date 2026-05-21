@@ -218,6 +218,8 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
                                 ld_image = item.get("image", "")
                                 if isinstance(ld_image, list):
                                     ld_image = ld_image[0]
+                                if isinstance(ld_image, dict):
+                                    ld_image = ld_image.get("url") or ld_image.get("contentUrl", "")
                                 return _make_record(
                                     shop_name, item.get("name", text),
                                     f"€{float(price):.2f}",

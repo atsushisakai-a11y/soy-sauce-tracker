@@ -13,6 +13,7 @@ Usage:
     python similarity/image_similarity.py
 """
 
+import ast
 import io
 import itertools
 import logging
@@ -87,14 +88,34 @@ def fetch_products(cur):
 
 
 def fetch_processed_dates(cur):
-    """Return (scrape_date, brand) pairs already present in the target table."""
+    """Return scrape_dates where ALL pairs were successfully computed.
+    A date is considered complete only if the number of rows matches
+    the expected C(n,2) combinations. We re-process incomplete dates."""
     cur.execute("""
-        SELECT DISTINCT scrape_date, product_name_1
+        SELECT scrape_date, COUNT(*) AS pair_count
         FROM STAGING_SIMILARITY_SCORES
+        GROUP BY scrape_date
     """)
-    # We use scrape_date alone as the incremental key — if any row exists for
-    # that date we consider it fully processed.
-    return {row[0] for row in cur.fetchall()}
+    rows = cur.fetchall()
+    # Only skip dates that have more than 1 pair — single-pair dates may be
+    # incomplete due to image download failures on previous runs.
+    return {row[0] for row in rows if row[1] > 1}
+
+
+def _clean_image_url(url: str) -> str:
+    """Extract a plain URL from image_url values that were stored as JSON-LD ImageObject strings."""
+    if not url:
+        return ""
+    if url.startswith("http"):
+        return url
+    # Handle cases like "{'@type': 'ImageObject', 'url': 'https://...', ...}"
+    try:
+        obj = ast.literal_eval(url)
+        if isinstance(obj, dict):
+            return obj.get("url") or obj.get("contentUrl") or obj.get("image", "")
+    except Exception:
+        pass
+    return ""
 
 
 def download_image(url: str):
@@ -146,9 +167,13 @@ def run():
         # Download all images for this group
         images = {}
         for shop_name, product_name, image_url in products:
-            img = download_image(image_url)
+            clean_url = _clean_image_url(image_url)
+            if not clean_url:
+                log.warning("  No valid image URL for %s — %s", shop_name, product_name)
+                continue
+            img = download_image(clean_url)
             if img:
-                images[(shop_name, product_name, image_url)] = img
+                images[(shop_name, product_name, clean_url)] = img
             else:
                 log.warning("  Could not load image for %s — %s", shop_name, product_name)
 
@@ -168,6 +193,11 @@ def run():
             ))
 
         if insert_rows:
+            # Remove any incomplete rows from a previous failed run for this date
+            cur.execute("""
+                DELETE FROM STAGING_SIMILARITY_SCORES WHERE SCRAPE_DATE = %s
+            """, (scrape_date,))
+
             cur.executemany("""
                 INSERT INTO STAGING_SIMILARITY_SCORES
                     (SCRAPE_DATE, SHOP_NAME_1, SHOP_NAME_2,
