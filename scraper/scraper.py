@@ -87,6 +87,7 @@ SHOPS = [
     {"shop_name": "Amazing Oriental",   "website": "https://amazingoriental.com"},
     {"shop_name": "Wah Nam Hong",       "website": "https://www.wah-nam-hong.nl"},
     {"shop_name": "Tjin's Toko", "website": "https://www.tjinstoko.eu", "direct_product_urls": [
+        # Kikkoman
         "https://www.tjinstoko.eu/nl/kikkoman-soy-sauce-1l.html",
         "https://www.tjinstoko.eu/nl/kikkoman-ponzu-soy-sauce-1l.html",
         "https://www.tjinstoko.eu/nl/kikkoman-tamari-soy-sauce-250ml.html",
@@ -98,10 +99,21 @@ SHOPS = [
         "https://www.tjinstoko.eu/nl/kikkoman-less-salt-schenkfles-150ml.html",
         "https://www.tjinstoko.eu/nl/kikkoman-sojasaus-250ml.html",
         "https://www.tjinstoko.eu/nl/kikkoman-soy-sauce-less-salt-250ml.html",
+        # Yamasa
         "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-500ml.html",
         "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-less-salt-150ml.html",
         "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-1l.html",
         "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-150ml.html",
+        # Lee Kum Kee
+        "https://www.tjinstoko.eu/nl/lee-kum-kee-premium-light-soy-sauce-500ml.html",
+        "https://www.tjinstoko.eu/nl/lee-kum-kee-premium-dark-soy-sauce-500ml.html",
+        # Other brands
+        "https://www.tjinstoko.eu/nl/silver-swan-soy-sauce-1l.html",
+        "https://www.tjinstoko.eu/nl/pearl-river-bridge-light-soy-sauce-500ml.html",
+        "https://www.tjinstoko.eu/nl/abc-sweet-soy-sauce-kecap-manis-132ml.html",
+        "https://www.tjinstoko.eu/nl/healthy-boy-thin-soy-sauce-700ml.html",
+        "https://www.tjinstoko.eu/nl/healthy-boy-black-soy-sauce-700ml.html",
+        "https://www.tjinstoko.eu/nl/sempio-soy-sauce-rich-mellow-jin-s-500ml.html",
     ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
     # Dutch supermarkets
