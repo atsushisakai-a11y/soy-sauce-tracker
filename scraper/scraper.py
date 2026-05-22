@@ -2,13 +2,10 @@
 Scraper for Kikkoman soy sauce products across selected Amsterdam Asian shops.
 Outputs: scraper/output/kikkoman_prices_<timestamp>.csv
 
-Target products:
-  - Kikkoman Koikuchi Shoyu 500ml
-  - Kikkoman Sojasaus 150ml
-
 Detection strategy per shop:
-  1. Shopify JSON API  (search suggest endpoint, then products.json)
-  2. HTML search page  (common search URL patterns + schema.org / JSON-LD)
+  1. direct_urls (optional) — fetch specific Shopify product handles directly
+  2. Shopify JSON API        — search suggest endpoint, then products.json
+  3. HTML search page        — common search URL patterns + schema.org / JSON-LD
 """
 
 import csv
@@ -45,7 +42,20 @@ SHOYU_KEYWORDS    = ["shoyu", "soy sauce", "sojasaus", "koikuchi"]
 SHOPS = [
     # Asian specialty shops
     {"shop_name": "NikanKitchen",       "website": "https://www.nikankitchen.com"},
-    {"shop_name": "Shilla Market",      "website": "https://shillamarket.com"},
+    {"shop_name": "Shilla Market", "website": "https://shillamarket.com", "direct_urls": [
+        "/products/kikkoman-koikuchi-shoyu-500ml",
+        "/products/kikkoman-shoyu-table-dispenser-150ml",
+        "/products/koikuchi-shoyu-1l",
+        "/products/kikkoman-sweet-soy-sauce-250ml",
+        "/products/kikkoman-nama-soy-sauce-200ml",
+        "/products/kikkoman-tamari-shoyu-250ml",
+        "/products/kikkoman-genen-shoyu-table-dispenser-150ml",
+        "/products/tokusen-yuki-shoyu-500ml",
+        "/products/tokusen-marudaizu-shoyu-1l",
+        "/products/teriyaki-bbq-garlic-250ml",
+        "/products/teriyaki-bbq-honey-250ml",
+        "/products/teriyaki-bbq-sesame-250ml",
+    ]},
     {"shop_name": "Oriental Webshop",   "website": "https://www.orientalwebshop.nl"},
     {"shop_name": "Dun Yong",           "website": "https://dunyong.com"},
     {"shop_name": "Amazing Oriental",   "website": "https://amazingoriental.com"},
@@ -108,6 +118,36 @@ def _make_record(shop_name, product_name, raw_price, currency, product_url, imag
         image_url=image_url or "",
         scraped_at=scraped_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Direct URL strategy (Shopify product JSON)
+# ---------------------------------------------------------------------------
+
+def _try_direct_urls(shop_name: str, base_url: str, handles: list[str], scrape_run_id: str, scraped_at: str) -> list[PriceRecord]:
+    """Fetch specific Shopify products by handle using the /products/{handle}.json endpoint."""
+    records = []
+    for handle in handles:
+        url = f"{base_url}{handle}.json"
+        r = _get(url)
+        if not r:
+            log.warning("  Could not fetch %s", url)
+            continue
+        try:
+            product = r.json().get("product", {})
+        except Exception:
+            continue
+        title = product.get("title", "")
+        variants = product.get("variants", [])
+        if not variants:
+            continue
+        price = variants[0].get("price", "")
+        product_url = f"{base_url}{handle}"
+        images = product.get("images", [])
+        image_url = images[0].get("src", "") if images else ""
+        records.append(_make_record(shop_name, title, f"€{price}", "EUR", product_url, image_url, scrape_run_id, scraped_at))
+        log.info("  ✓ %s — €%s", title, price)
+    return records
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +279,11 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
 def scrape_shop(shop: dict, scrape_run_id: str, scraped_at: str) -> list[PriceRecord]:
     shop_name = shop["shop_name"]
     base_url  = shop["website"].rstrip("/")
+
+    # If direct_urls are configured, use them exclusively
+    if shop.get("direct_urls"):
+        return _try_direct_urls(shop_name, base_url, shop["direct_urls"], scrape_run_id, scraped_at)
+
     found = []
     for size in TARGET_SIZES:
         record = _try_shopify(shop_name, base_url, size, scrape_run_id, scraped_at)
