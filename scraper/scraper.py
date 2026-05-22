@@ -1,11 +1,19 @@
 """
-Scraper for Kikkoman soy sauce products across selected Amsterdam Asian shops.
+Scraper for soy sauce products across selected Dutch Asian shops and supermarkets.
 Outputs: scraper/output/kikkoman_prices_<timestamp>.csv
 
 Detection strategy per shop:
-  1. direct_urls (optional) — fetch specific Shopify product handles directly
-  2. Shopify JSON API        — search suggest endpoint, then products.json
-  3. HTML search page        — common search URL patterns + schema.org / JSON-LD
+  1. direct_urls         — Shopify shops: fetch specific product handles via .json API
+  2. direct_product_urls — HTML shops: fetch specific product page URLs directly
+  3. Shopify JSON API    — search suggest endpoint, then products.json
+  4. HTML search page    — common search URL patterns + schema.org / JSON-LD
+
+Soy sauce category pages (for manual reference / future updates):
+  Shilla Market   : https://shillamarket.com/collections/soy-sauce
+  Dun Yong        : https://dunyong.com/collections/soy-sauce
+  Tjin's Toko     : https://www.tjinstoko.eu/nl/zoeken-per-land/japan/sojasaus-japan/
+  Albert Heijn    : https://www.ah.nl/producten/6409/soepen-sauzen-kruiden-olie?Soort=4421
+  Jumbo           : https://www.jumbo.com/producten/wereldkeukens,-kruiden,-pasta-en-rijst/aziatische-keuken/bijgerechten-en-sauzen/ketjap-en-sojasaus/
 """
 
 import csv
@@ -78,7 +86,23 @@ SHOPS = [
     ]},
     {"shop_name": "Amazing Oriental",   "website": "https://amazingoriental.com"},
     {"shop_name": "Wah Nam Hong",       "website": "https://www.wah-nam-hong.nl"},
-    {"shop_name": "Tjin's Toko",        "website": "https://tjinstoko.eu"},
+    {"shop_name": "Tjin's Toko", "website": "https://www.tjinstoko.eu", "direct_product_urls": [
+        "https://www.tjinstoko.eu/nl/kikkoman-soy-sauce-1l.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-ponzu-soy-sauce-1l.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-tamari-soy-sauce-250ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-ponzu-citrus-soy-sauce-250ml.html",
+        "https://www.tjinstoko.eu/nl/nama-ongepasteuriseerde-sojasaus-200ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-sushi-sashimi-soy-sauce-250ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-soy-sauce-schenkfles-150ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-tamari-sojasaus-150ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-less-salt-schenkfles-150ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-sojasaus-250ml.html",
+        "https://www.tjinstoko.eu/nl/kikkoman-soy-sauce-less-salt-250ml.html",
+        "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-500ml.html",
+        "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-less-salt-150ml.html",
+        "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-1l.html",
+        "https://www.tjinstoko.eu/nl/yamasa-soy-sauce-150ml.html",
+    ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
     # Dutch supermarkets
     {"shop_name": "Albert Heijn",       "website": "https://www.ah.nl"},
@@ -165,6 +189,66 @@ def _try_direct_urls(shop_name: str, base_url: str, handles: list[str], scrape_r
         image_url = images[0].get("src", "") if images else ""
         records.append(_make_record(shop_name, title, f"€{price}", "EUR", product_url, image_url, scrape_run_id, scraped_at))
         log.info("  ✓ %s — €%s", title, price)
+    return records
+
+
+# ---------------------------------------------------------------------------
+# Direct HTML product page strategy (non-Shopify shops)
+# ---------------------------------------------------------------------------
+
+def _extract_price_from_page(shop_name, title, product_url, page_image_url, soup, scrape_run_id, scraped_at) -> Optional[PriceRecord]:
+    """Extract price from a product page using meta itemprop or JSON-LD."""
+    meta = soup.find("meta", {"itemprop": "price"})
+    if meta and meta.get("content"):
+        return _make_record(shop_name, title, f"€{float(meta['content']):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
+
+    for script in soup.find_all("script", {"type": "application/ld+json"}):
+        try:
+            ld = json.loads(script.string or "")
+            items = ld if isinstance(ld, list) else [ld]
+            for item in items:
+                if item.get("@type") in ("Product", "Offer"):
+                    offer = item.get("offers", item)
+                    if isinstance(offer, list):
+                        offer = offer[0]
+                    price = offer.get("price") or offer.get("lowPrice")
+                    if price:
+                        ld_image = item.get("image", "")
+                        if isinstance(ld_image, list):
+                            ld_image = ld_image[0]
+                        if isinstance(ld_image, dict):
+                            ld_image = ld_image.get("url") or ld_image.get("contentUrl", "")
+                        return _make_record(
+                            shop_name, item.get("name", title),
+                            f"€{float(price):.2f}",
+                            offer.get("priceCurrency", "EUR"),
+                            product_url, ld_image or page_image_url,
+                            scrape_run_id, scraped_at,
+                        )
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return None
+
+
+def _scrape_html_product_pages(shop_name: str, urls: list[str], scrape_run_id: str, scraped_at: str) -> list[PriceRecord]:
+    """Fetch specific HTML product pages and extract price + image."""
+    records = []
+    for product_url in urls:
+        r = _get(product_url)
+        if not r:
+            log.warning("  Could not fetch %s", product_url)
+            continue
+        soup = BeautifulSoup(r.text, "html.parser")
+        h1 = soup.find("h1")
+        title = h1.get_text(strip=True) if h1 else product_url
+        og_image = soup.find("meta", {"property": "og:image"})
+        page_image_url = og_image.get("content", "") if og_image else ""
+        record = _extract_price_from_page(shop_name, title, product_url, page_image_url, soup, scrape_run_id, scraped_at)
+        if record:
+            records.append(record)
+            log.info("  ✓ %s — %s", record.product_name, record.raw_price)
+        else:
+            log.warning("  Could not extract price for %s", product_url)
     return records
 
 
@@ -298,9 +382,13 @@ def scrape_shop(shop: dict, scrape_run_id: str, scraped_at: str) -> list[PriceRe
     shop_name = shop["shop_name"]
     base_url  = shop["website"].rstrip("/")
 
-    # If direct_urls are configured, use them exclusively
+    # Shopify shops: fetch specific product handles via .json API
     if shop.get("direct_urls"):
         return _try_direct_urls(shop_name, base_url, shop["direct_urls"], scrape_run_id, scraped_at)
+
+    # HTML shops: fetch specific product page URLs directly
+    if shop.get("direct_product_urls"):
+        return _scrape_html_product_pages(shop_name, shop["direct_product_urls"], scrape_run_id, scraped_at)
 
     found = []
     for size in TARGET_SIZES:
