@@ -72,6 +72,7 @@ def get_conn():
 def ensure_table(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS STAGING_SIMILARITY_SCORES (
+            SIMILARITY_ID         VARCHAR(36),
             SCRAPE_DATE           DATE,
             SHOP_NAME_1           VARCHAR(255),
             SHOP_NAME_2           VARCHAR(255),
@@ -87,6 +88,7 @@ def ensure_table(cur):
     """)
     # Add new columns if table already existed without them
     for col, dtype in [
+        ("SIMILARITY_ID",    "VARCHAR(36)"),
         ("IMAGE_SIMILARITY", "FLOAT"),
         ("NAME_SIMILARITY",  "FLOAT"),
         ("COMBINED_SCORE",   "FLOAT"),
@@ -263,11 +265,14 @@ def run():
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
             name_score = compute_name_similarity(name_a, name_b)
-            combined   = round(img_score * name_score, 4)
+            # Geometric mean — less aggressive than simple product,
+            # handles cross-shop naming differences more gracefully
+            combined   = round((img_score * name_score) ** 0.5, 4)
+            similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f  %s vs %s",
                      img_score, name_score, combined, name_a, name_b)
             insert_rows.append((
-                scrape_date, shop_a, shop_b, name_a, name_b,
+                similarity_id, scrape_date, shop_a, shop_b, name_a, name_b,
                 url_a, url_b, img_score, name_score, combined, computed_at
             ))
 
@@ -279,12 +284,12 @@ def run():
 
             cur.executemany("""
                 INSERT INTO STAGING_SIMILARITY_SCORES
-                    (SCRAPE_DATE, SHOP_NAME_1, SHOP_NAME_2,
+                    (SIMILARITY_ID, SCRAPE_DATE, SHOP_NAME_1, SHOP_NAME_2,
                      PRODUCT_NAME_1, PRODUCT_NAME_2,
                      IMAGE_URL_1, IMAGE_URL_2,
                      IMAGE_SIMILARITY, NAME_SIMILARITY, COMBINED_SCORE,
                      COMPUTED_AT)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, insert_rows)
             conn.commit()
             total_inserted += len(insert_rows)
