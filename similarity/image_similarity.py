@@ -177,6 +177,25 @@ def compute_image_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
     return round(max(0.0, min(1.0, score)), 4)
 
 
+# Word pairs that are mutually exclusive — if one name has one term and the
+# other has the opposing term, they cannot be the same product.
+EXCLUSIVE_PAIRS = [
+    ("dark", "light"),
+    ("sweet", "less salt"),
+    ("sweet", "reduced salt"),
+    ("tamari", "koikuchi"),
+]
+
+def _conflict_penalty(name_a: str, name_b: str) -> float:
+    """Return 0.2 if the names contain mutually exclusive terms, else 1.0."""
+    a, b = name_a.lower(), name_b.lower()
+    for term_x, term_y in EXCLUSIVE_PAIRS:
+        if (term_x in a and term_y in b) or (term_y in a and term_x in b):
+            log.debug("  Conflict detected: '%s' vs '%s'", term_x, term_y)
+            return 0.2
+    return 1.0
+
+
 def compute_name_similarity(name_a: str, name_b: str) -> float:
     """Jaccard similarity on word tokens (0.0 – 1.0).
 
@@ -266,9 +285,9 @@ def run():
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
             name_score = compute_name_similarity(name_a, name_b)
-            # Geometric mean — less aggressive than simple product,
-            # handles cross-shop naming differences more gracefully
-            combined   = round((img_score * name_score) ** 0.5, 4)
+            penalty    = _conflict_penalty(name_a, name_b)
+            # Geometric mean scaled by conflict penalty
+            combined   = round((img_score * name_score) ** 0.5 * penalty, 4)
             similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f  %s vs %s",
                      img_score, name_score, combined, name_a, name_b)
