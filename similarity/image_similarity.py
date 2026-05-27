@@ -23,6 +23,7 @@ import io
 import itertools
 import logging
 import os
+import re
 from datetime import datetime, timezone
 
 import numpy as np
@@ -71,17 +72,29 @@ def get_conn():
 def ensure_table(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS STAGING_SIMILARITY_SCORES (
-            SCRAPE_DATE      DATE,
-            SHOP_NAME_1      VARCHAR(255),
-            SHOP_NAME_2      VARCHAR(255),
-            PRODUCT_NAME_1   VARCHAR(500),
-            PRODUCT_NAME_2   VARCHAR(500),
-            IMAGE_URL_1      VARCHAR(2000),
-            IMAGE_URL_2      VARCHAR(2000),
-            SIMILARITY_SCORE FLOAT,
-            COMPUTED_AT      TIMESTAMP_NTZ
+            SCRAPE_DATE           DATE,
+            SHOP_NAME_1           VARCHAR(255),
+            SHOP_NAME_2           VARCHAR(255),
+            PRODUCT_NAME_1        VARCHAR(500),
+            PRODUCT_NAME_2        VARCHAR(500),
+            IMAGE_URL_1           VARCHAR(2000),
+            IMAGE_URL_2           VARCHAR(2000),
+            IMAGE_SIMILARITY      FLOAT,
+            NAME_SIMILARITY       FLOAT,
+            COMBINED_SCORE        FLOAT,
+            COMPUTED_AT           TIMESTAMP_NTZ
         )
     """)
+    # Add new columns if table already existed without them
+    for col, dtype in [
+        ("IMAGE_SIMILARITY", "FLOAT"),
+        ("NAME_SIMILARITY",  "FLOAT"),
+        ("COMBINED_SCORE",   "FLOAT"),
+    ]:
+        cur.execute(f"""
+            ALTER TABLE STAGING_SIMILARITY_SCORES
+            ADD COLUMN IF NOT EXISTS {col} {dtype}
+        """)
 
 
 def fetch_products(cur):
@@ -153,13 +166,38 @@ def get_embedding(img: Image.Image) -> np.ndarray:
     return features[0].cpu().numpy()
 
 
-def compute_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
+def compute_image_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
     """Cosine similarity between CLIP embeddings of two images (0.0 – 1.0)."""
     emb_a = get_embedding(img_a)
     emb_b = get_embedding(img_b)
     score = float(np.dot(emb_a, emb_b))
-    # Clamp to [0, 1] — cosine can be slightly negative for very dissimilar images
     return round(max(0.0, min(1.0, score)), 4)
+
+
+def compute_name_similarity(name_a: str, name_b: str) -> float:
+    """Jaccard similarity on word tokens (0.0 – 1.0).
+
+    Normalises both names to lowercase alphanumeric tokens, then computes
+    intersection / union.  Captures shared words like brand names, volumes,
+    and product descriptors while penalising names with very different terms.
+
+    Example:
+        'Sweet Soy Sauce for Rice (Kikkoman) 250ml'
+        vs 'Kikkoman Sojasaus, 250ml'
+        tokens_a = {sweet, soy, sauce, for, rice, kikkoman, 250ml}
+        tokens_b = {kikkoman, sojasaus, 250ml}
+        intersection = {kikkoman, 250ml}  →  score = 2/8 = 0.25
+    """
+    def tokenise(s: str) -> set[str]:
+        return set(re.sub(r"[^a-z0-9]", " ", s.lower()).split())
+
+    tokens_a = tokenise(name_a)
+    tokens_b = tokenise(name_b)
+    if not tokens_a or not tokens_b:
+        return 0.0
+    intersection = tokens_a & tokens_b
+    union = tokens_a | tokens_b
+    return round(len(intersection) / len(union), 4)
 
 
 def run():
@@ -223,10 +261,14 @@ def run():
             shop_b, name_b, url_b = key_b
             if shop_a == shop_b:
                 continue
-            score = compute_similarity(img_a, img_b)
-            log.info("  %.4f  %s vs %s", score, name_a, name_b)
+            img_score  = compute_image_similarity(img_a, img_b)
+            name_score = compute_name_similarity(name_a, name_b)
+            combined   = round(img_score * name_score, 4)
+            log.info("  img=%.4f name=%.4f combined=%.4f  %s vs %s",
+                     img_score, name_score, combined, name_a, name_b)
             insert_rows.append((
-                scrape_date, shop_a, shop_b, name_a, name_b, url_a, url_b, score, computed_at
+                scrape_date, shop_a, shop_b, name_a, name_b,
+                url_a, url_b, img_score, name_score, combined, computed_at
             ))
 
         if insert_rows:
@@ -240,8 +282,9 @@ def run():
                     (SCRAPE_DATE, SHOP_NAME_1, SHOP_NAME_2,
                      PRODUCT_NAME_1, PRODUCT_NAME_2,
                      IMAGE_URL_1, IMAGE_URL_2,
-                     SIMILARITY_SCORE, COMPUTED_AT)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     IMAGE_SIMILARITY, NAME_SIMILARITY, COMBINED_SCORE,
+                     COMPUTED_AT)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, insert_rows)
             conn.commit()
             total_inserted += len(insert_rows)
