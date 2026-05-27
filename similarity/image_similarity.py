@@ -184,6 +184,9 @@ EXCLUSIVE_PAIRS = [
     ("sweet", "less salt"),
     ("sweet", "reduced salt"),
     ("tamari", "koikuchi"),
+    ("usukuchi", "koikuchi"),   # Usukuchi = light soy sauce, Koikuchi = dark/regular
+    ("usukuchi", "dark"),
+    ("light", "koikuchi"),      # "Light Soy Sauce" vs "Koikuchi" are different types
 ]
 
 def _conflict_penalty(name_a: str, name_b: str) -> float:
