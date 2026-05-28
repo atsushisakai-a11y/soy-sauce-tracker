@@ -1,6 +1,6 @@
 """
 Compute pairwise image similarity scores for Kikkoman products.
-# trigger: 2026-05-28c
+# trigger: 2026-05-28d
 
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
@@ -371,6 +371,24 @@ KNOWN_BRANDS = [
 ]
 
 
+def _name_mismatch_penalty(name_similarity: float) -> float:
+    """Return 0.3 when the two product names share almost no tokens (Jaccard < 0.10).
+
+    Acts as a safety net for pairs where the image model is fooled by visually
+    similar bottles but the names are completely different — e.g.
+    "Koikuchi Shoyu 500ML" vs "Sempio Rich & Mellow Jin S 500ml" share only
+    the volume token '500ml', giving Jaccard = 0.09.
+
+    Threshold 0.10 is very conservative: legitimate cross-language matches
+    (Healthy Boy → Dek Som Boon alias) and differently-worded same-product
+    names both score well above 0.10 after alias normalisation.
+    """
+    if name_similarity < 0.10:
+        log.debug("  Name mismatch penalty: name_similarity=%.4f < 0.10", name_similarity)
+        return 0.3
+    return 1.0
+
+
 def _brand_conflict_penalty(name_a: str, name_b: str) -> float:
     """Return 0.2 if the names reference different known brands.
 
@@ -501,7 +519,8 @@ def run():
             penalty    = (_conflict_penalty(name_a, name_b)
                          * _qualifier_penalty(name_a, name_b)
                          * _volume_penalty(name_a, name_b)
-                         * _brand_conflict_penalty(name_a, name_b))
+                         * _brand_conflict_penalty(name_a, name_b)
+                         * _name_mismatch_penalty(name_score))
             # Image similarity × text penalties (name not in base score)
             combined   = round(img_score * penalty, 4)
             is_match   = combined >= MATCH_THRESHOLD
