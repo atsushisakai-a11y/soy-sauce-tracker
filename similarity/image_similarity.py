@@ -218,6 +218,7 @@ EXCLUSIVE_PAIRS = [
     ("sweet", "reduced salt"),
     ("sweet", "tamari"),        # Tamari is savoury/umami, not sweet
     ("sweet", "dark"),          # Sweet soy sauce vs dark soy sauce are different categories
+    ("thin", "black"),          # Thin soy sauce vs Black soy sauce are opposite types
     ("tamari", "koikuchi"),
     ("usukuchi", "koikuchi"),   # Usukuchi = light soy sauce, Koikuchi = dark/regular
     ("usukuchi", "dark"),
@@ -289,6 +290,42 @@ def _volume_penalty(name_a: str, name_b: str) -> float:
     if abs(vol_a - vol_b) / max(vol_a, vol_b) > 0.05:
         log.debug("  Volume mismatch: %.0fml vs %.0fml", vol_a, vol_b)
         return 0.5
+    return 1.0
+
+
+# Canonical brand names. Checked after NAME_ALIASES are applied so that
+# alternate-language brand names (e.g. "healthy boy" → "dek som boon")
+# are resolved before comparison.
+KNOWN_BRANDS = [
+    "kikkoman",
+    "yamasa",
+    "abc",
+    "pearl river bridge",
+    "lee kum kee",
+    "sempio",
+    "marukin",
+    "silver swan",
+    "mee chun",
+    "dek som boon",   # "healthy boy" aliased to this
+    "kishibori",
+    "tokusen",        # premium Kikkoman/artisan line — distinct from generic brands
+]
+
+
+def _brand_conflict_penalty(name_a: str, name_b: str) -> float:
+    """Return 0.2 if the names reference different known brands.
+
+    Applies NAME_ALIASES first so alternate-language brand names resolve
+    to the same canonical token before comparison.
+    Different brands = definitely different products, regardless of image score.
+    """
+    a = _normalize_name(name_a)
+    b = _normalize_name(name_b)
+    brands_a = {brand for brand in KNOWN_BRANDS if brand in a}
+    brands_b = {brand for brand in KNOWN_BRANDS if brand in b}
+    if brands_a and brands_b and not (brands_a & brands_b):
+        log.debug("  Brand conflict: %s vs %s", brands_a, brands_b)
+        return 0.2
     return 1.0
 
 
@@ -404,7 +441,8 @@ def run():
             name_score = compute_name_similarity(name_a, name_b)  # stored for reference
             penalty    = (_conflict_penalty(name_a, name_b)
                          * _qualifier_penalty(name_a, name_b)
-                         * _volume_penalty(name_a, name_b))
+                         * _volume_penalty(name_a, name_b)
+                         * _brand_conflict_penalty(name_a, name_b))
             # Image similarity × text penalties (name not in base score)
             combined   = round(img_score * penalty, 4)
             is_match   = combined >= MATCH_THRESHOLD
