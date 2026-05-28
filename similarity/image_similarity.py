@@ -1,6 +1,6 @@
 """
 Compute pairwise image similarity scores for Kikkoman products.
-# trigger: 2026-05-28
+# trigger: 2026-05-28b
 
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
@@ -224,11 +224,48 @@ def get_embedding(img: Image.Image) -> np.ndarray:
     return features[0].cpu().numpy()
 
 
+def compute_color_histogram_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
+    """Cosine similarity between normalised RGB histograms (0.0 – 1.0).
+
+    Captures gross colour differences that DINOv2's CLS token misses.
+    A green-label bottle vs a red-label bottle will score low here (~0.3–0.5)
+    even when DINOv2 finds the silhouettes similar (~0.9).
+    bins=32 per channel → 96-dim histogram; coarser than pixel-level but
+    robust to lighting variation and exact shade differences.
+    """
+    def hist(img: Image.Image, bins: int = 32) -> np.ndarray:
+        arr = np.array(img).reshape(-1, 3).astype(np.float32)
+        h = np.concatenate([
+            np.histogram(arr[:, c], bins=bins, range=(0, 256))[0]
+            for c in range(3)
+        ]).astype(np.float32)
+        norm = h.sum()
+        return h / (norm + 1e-9)
+
+    ha, hb = hist(img_a), hist(img_b)
+    norm_a = np.linalg.norm(ha)
+    norm_b = np.linalg.norm(hb)
+    score = float(np.dot(ha, hb) / (norm_a * norm_b + 1e-9))
+    return round(max(0.0, min(1.0, score)), 4)
+
+
 def compute_image_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
-    """Cosine similarity between DINOv2 embeddings of two images (0.0 – 1.0)."""
-    emb_a = get_embedding(img_a)
-    emb_b = get_embedding(img_b)
-    score = float(np.dot(emb_a, emb_b))
+    """Geometric mean of DINOv2 structural similarity and colour histogram similarity.
+
+    DINOv2 CLS token captures bottle shape and label layout well but is largely
+    colour-agnostic — a green-label and a red-label 1 L bottle score ~0.89.
+    The colour histogram component penalises pairs whose overall colour
+    distributions differ (green vs red label → ~0.4), pulling the geometric
+    mean down to ~0.6 and away from the IS_MATCH threshold.
+
+    Geometric mean chosen over arithmetic mean so that a near-zero score on
+    either component collapses the combined score toward zero.
+    """
+    dino_score  = float(np.dot(get_embedding(img_a), get_embedding(img_b)))
+    dino_score  = max(0.0, min(1.0, dino_score))
+    color_score = compute_color_histogram_similarity(img_a, img_b)
+    score = (dino_score * color_score) ** 0.5
+    log.debug("  dino=%.4f color=%.4f → image=%.4f", dino_score, color_score, score)
     return round(max(0.0, min(1.0, score)), 4)
 
 
