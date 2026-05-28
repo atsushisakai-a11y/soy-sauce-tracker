@@ -237,6 +237,36 @@ def _qualifier_penalty(name_a: str, name_b: str) -> float:
     return 1.0
 
 
+def _extract_volume_ml(name: str) -> float | None:
+    """Extract volume in ml from a product name string.
+
+    Handles patterns like '500ml', '1L', '1.5l', '250 ml'.
+    Returns None when no volume is found.
+    """
+    m = re.search(r'(\d+(?:[.,]\d+)?)\s*(l|ml)\b', name.lower())
+    if not m:
+        return None
+    val = float(m.group(1).replace(',', '.'))
+    return val * 1000 if m.group(2) == 'l' else val
+
+
+def _volume_penalty(name_a: str, name_b: str) -> float:
+    """Return 0.5 if both names specify a volume and the volumes differ.
+
+    Different volumes mean different SKUs — not useful for price comparison
+    even if the product type is the same (e.g. Kikkoman Less Salt 1L vs 250ml).
+    A 5 % tolerance handles rounding edge-cases ('1l' == '1000ml').
+    """
+    vol_a = _extract_volume_ml(name_a)
+    vol_b = _extract_volume_ml(name_b)
+    if vol_a is None or vol_b is None:
+        return 1.0  # volume unknown for one side — cannot penalise
+    if abs(vol_a - vol_b) / max(vol_a, vol_b) > 0.05:
+        log.debug("  Volume mismatch: %.0fml vs %.0fml", vol_a, vol_b)
+        return 0.5
+    return 1.0
+
+
 def compute_name_similarity(name_a: str, name_b: str) -> float:
     """Jaccard similarity on word tokens (0.0 – 1.0).
 
@@ -326,8 +356,10 @@ def run():
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
             name_score = compute_name_similarity(name_a, name_b)
-            penalty    = _conflict_penalty(name_a, name_b) * _qualifier_penalty(name_a, name_b)
-            # Geometric mean scaled by conflict + qualifier penalties
+            penalty    = (_conflict_penalty(name_a, name_b)
+                         * _qualifier_penalty(name_a, name_b)
+                         * _volume_penalty(name_a, name_b))
+            # Geometric mean scaled by conflict + qualifier + volume penalties
             combined   = round((img_score * name_score) ** 0.5 * penalty, 4)
             is_match   = combined >= MATCH_THRESHOLD
             similarity_id = str(uuid.uuid4())
