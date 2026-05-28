@@ -32,6 +32,7 @@ import os
 import re
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import requests
@@ -403,7 +404,7 @@ def run():
         key = (scrape_date, brand)
         groups.setdefault(key, []).append((shop_name, product_name, image_url))
 
-    computed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    computed_at = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
     total_inserted = 0
 
     for (scrape_date, brand), products in groups.items():
