@@ -61,8 +61,10 @@ DINO_MODEL_NAME = "facebook/dinov2-base"
 # Pairs with combined_score >= this are considered the same product across shops.
 # DINOv2 cosine similarity for the exact same product image is typically 0.95+;
 # clearly different products score 0.3–0.6. Threshold set at 0.85 to require
-# strong visual agreement — recalibrate after first full run if needed.
-MATCH_THRESHOLD = 0.85
+# strong visual agreement — calibrated from data: confirmed match
+# "Naturally Brewed Soy Sauce (Yamasa) 150ml" vs "Yamasa Soy Sauce 150ml"
+# scores 0.81 with no penalties applied.
+MATCH_THRESHOLD = 0.80
 
 # Load DINOv2 model once at startup (~330 MB download on first run)
 log.info("Loading DINOv2 model…")
