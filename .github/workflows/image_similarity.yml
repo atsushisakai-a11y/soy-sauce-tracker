@@ -32,7 +32,7 @@ jobs:
         run: |
           pip install snowflake-connector-python python-dotenv Pillow requests numpy
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install transformers
+          pip install transformers timm
 
       - name: Clear existing similarity scores
         run: |

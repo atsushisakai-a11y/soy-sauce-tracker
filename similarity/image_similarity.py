@@ -5,13 +5,18 @@ Compute pairwise image similarity scores for Kikkoman products.
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
   2. For each (scrape_date, brand) group, download product images and compute
-     CLIP embedding cosine similarity for every cross-shop product pair
-  3. Write results to STAGING.STAGING_SIMILARITY_SCORES (incremental — skips
-     scrape_dates already present in the target table)
+     DINOv2 embedding cosine similarity for every cross-shop product pair
+  3. Write results to STAGING.STAGING_SIMILARITY_SCORES (full refresh on every run)
 
-CLIP (openai/clip-vit-base-patch32) understands visual semantics — bottle
-shape, label content, proportions — giving far more meaningful scores than
-perceptual hashing which only sees brightness patterns.
+Model: DINOv2 (facebook/dinov2-base)
+  Self-supervised ViT trained purely on visual features — no language bias.
+  Unlike CLIP, it does not cluster "Asian condiment bottles" together just
+  because they share a semantic category; it responds to actual visual
+  differences in label colour, shape, and texture.
+
+Combined score: IMAGE_SIMILARITY × penalties
+  Text-based penalties (conflict, qualifier, volume) are still applied on top
+  of the image score; NAME_SIMILARITY is computed and stored for reference only.
 
 Usage:
     pip install snowflake-connector-python python-dotenv \
@@ -34,7 +39,7 @@ import snowflake.connector
 import torch
 from dotenv import load_dotenv
 from PIL import Image
-from transformers import CLIPModel, CLIPProcessor
+from transformers import AutoImageProcessor, AutoModel
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -49,19 +54,20 @@ HEADERS = {
     )
 }
 TIMEOUT = 15
-CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
+DINO_MODEL_NAME = "facebook/dinov2-base"
 
 # Pairs with combined_score >= this are considered the same product across shops.
-# Calibrated from data: all confirmed same-product pairs score >= 0.62;
-# below that, cross-brand / cross-type pairs start appearing.
-MATCH_THRESHOLD = 0.65
+# DINOv2 cosine similarity for the exact same product image is typically 0.95+;
+# clearly different products score 0.3–0.6. Threshold set at 0.85 to require
+# strong visual agreement — recalibrate after first full run if needed.
+MATCH_THRESHOLD = 0.85
 
-# Load CLIP model once at startup (~350 MB download on first run)
-log.info("Loading CLIP model…")
-_PROCESSOR = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
-_MODEL = CLIPModel.from_pretrained(CLIP_MODEL_NAME)
+# Load DINOv2 model once at startup (~330 MB download on first run)
+log.info("Loading DINOv2 model…")
+_PROCESSOR = AutoImageProcessor.from_pretrained(DINO_MODEL_NAME)
+_MODEL     = AutoModel.from_pretrained(DINO_MODEL_NAME)
 _MODEL.eval()
-log.info("CLIP model ready.")
+log.info("DINOv2 model ready.")
 
 
 def get_conn():
@@ -165,20 +171,18 @@ def download_image(url: str):
 
 
 def get_embedding(img: Image.Image) -> np.ndarray:
-    """Return a normalised CLIP image embedding as a 1-D numpy array."""
+    """Return a normalised DINOv2 CLS-token embedding as a 1-D numpy array."""
     inputs = _PROCESSOR(images=img, return_tensors="pt")
     with torch.no_grad():
-        # Pass only pixel_values to avoid unexpected keyword arguments
-        features = _MODEL.get_image_features(pixel_values=inputs["pixel_values"])
-    # Some transformers versions return BaseModelOutputWithPooling instead of a tensor
-    if not isinstance(features, torch.Tensor):
-        features = features.pooler_output
+        outputs = _MODEL(**inputs)
+    # CLS token is the first token of the last hidden state
+    features = outputs.last_hidden_state[:, 0, :]
     features = features / features.norm(dim=-1, keepdim=True)
     return features[0].cpu().numpy()
 
 
 def compute_image_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
-    """Cosine similarity between CLIP embeddings of two images (0.0 – 1.0)."""
+    """Cosine similarity between DINOv2 embeddings of two images (0.0 – 1.0)."""
     emb_a = get_embedding(img_a)
     emb_b = get_embedding(img_b)
     score = float(np.dot(emb_a, emb_b))
@@ -376,12 +380,12 @@ def run():
             if shop_a == shop_b:
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
-            name_score = compute_name_similarity(name_a, name_b)
+            name_score = compute_name_similarity(name_a, name_b)  # stored for reference
             penalty    = (_conflict_penalty(name_a, name_b)
                          * _qualifier_penalty(name_a, name_b)
                          * _volume_penalty(name_a, name_b))
-            # Geometric mean scaled by conflict + qualifier + volume penalties
-            combined   = round((img_score * name_score) ** 0.5 * penalty, 4)
+            # Image similarity × text penalties (name not in base score)
+            combined   = round(img_score * penalty, 4)
             is_match   = combined >= MATCH_THRESHOLD
             similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f is_match=%s  %s vs %s",
