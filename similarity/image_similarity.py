@@ -1,6 +1,6 @@
 """
 Compute pairwise image similarity scores for Kikkoman products.
-# trigger: 2026-05-28d
+# trigger: 2026-05-28e
 
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
@@ -225,18 +225,33 @@ def get_embedding(img: Image.Image) -> np.ndarray:
 
 
 def compute_color_histogram_similarity(img_a: Image.Image, img_b: Image.Image) -> float:
-    """Cosine similarity between normalised RGB histograms (0.0 – 1.0).
+    """Cosine similarity between normalised RGB histograms of coloured pixels only.
 
-    Captures gross colour differences that DINOv2's CLS token misses.
-    A green-label bottle vs a red-label bottle will score low here (~0.3–0.5)
-    even when DINOv2 finds the silhouettes similar (~0.9).
-    bins=32 per channel → 96-dim histogram; coarser than pixel-level but
-    robust to lighting variation and exact shade differences.
+    Excludes near-white pixels (background whitened by remove_background) and
+    near-black pixels (dark liquid whitened by remove_dark_liquid) so the
+    histogram captures only the discriminative coloured regions: lid and label.
+
+    Without this exclusion, both post-processed images are ~90 % white, making
+    their full histograms nearly identical and the score ~0.95 regardless of
+    whether one lid is green and the other is red.
+
+    Falls back to the full image if fewer than 100 coloured pixels remain.
+    bins=32 per channel → 96-dim vector; coarser than pixel-level but robust
+    to minor lighting variation.
     """
+    WHITE_THR = 200   # R,G,B all above → background / whitened area
+    BLACK_THR = 60    # R,G,B all below → residual dark pixels (guard)
+
     def hist(img: Image.Image, bins: int = 32) -> np.ndarray:
         arr = np.array(img).reshape(-1, 3).astype(np.float32)
+        is_white = (arr[:, 0] > WHITE_THR) & (arr[:, 1] > WHITE_THR) & (arr[:, 2] > WHITE_THR)
+        is_black = (arr[:, 0] < BLACK_THR) & (arr[:, 1] < BLACK_THR) & (arr[:, 2] < BLACK_THR)
+        colored = arr[~(is_white | is_black)]
+        if len(colored) < 100:     # almost no colour — fall back to full image
+            log.debug("  histogram: too few coloured pixels (%d), using full image", len(colored))
+            colored = arr
         h = np.concatenate([
-            np.histogram(arr[:, c], bins=bins, range=(0, 256))[0]
+            np.histogram(colored[:, c], bins=bins, range=(0, 256))[0]
             for c in range(3)
         ]).astype(np.float32)
         norm = h.sum()
@@ -417,6 +432,9 @@ NAME_ALIASES: dict[str, str] = {
     "shouyu":       "shoyu",
     # Dutch ↔ English
     "sojasaus":     "soy sauce",
+    # Japanese product-type terms → English equivalents (triggers qualifier penalty)
+    "gen'en":       "reduced salt",   # 減塩 = reduced salt (Kikkoman Gen'en line)
+    "genen":        "reduced salt",   # alternate romanisation without apostrophe
 }
 
 
