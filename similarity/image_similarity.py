@@ -267,22 +267,43 @@ def _volume_penalty(name_a: str, name_b: str) -> float:
     return 1.0
 
 
+# Known aliases applied before tokenising.
+# Each entry maps a phrase to its canonical form so that Jaccard
+# treats equivalent names as identical tokens.
+# Key insight: order matters — longer phrases must come before their sub-words.
+NAME_ALIASES: dict[str, str] = {
+    # Brand name equivalences (English ↔ Thai/Japanese alternate names)
+    "healthy boy":  "dek som boon",   # same brand, different language
+    # Romanisation variants of Japanese 醤油
+    "shouyu":       "shoyu",
+    # Dutch ↔ English
+    "sojasaus":     "soy sauce",
+}
+
+
+def _normalize_name(name: str) -> str:
+    """Apply NAME_ALIASES substitutions (longest-first) before tokenising."""
+    n = name.lower()
+    for alias, canonical in NAME_ALIASES.items():
+        n = n.replace(alias, canonical)
+    return n
+
+
 def compute_name_similarity(name_a: str, name_b: str) -> float:
     """Jaccard similarity on word tokens (0.0 – 1.0).
 
-    Normalises both names to lowercase alphanumeric tokens, then computes
-    intersection / union.  Captures shared words like brand names, volumes,
-    and product descriptors while penalising names with very different terms.
+    Normalises both names via NAME_ALIASES then to lowercase alphanumeric
+    tokens, and computes intersection / union.
 
-    Example:
-        'Sweet Soy Sauce for Rice (Kikkoman) 250ml'
-        vs 'Kikkoman Sojasaus, 250ml'
-        tokens_a = {sweet, soy, sauce, for, rice, kikkoman, 250ml}
-        tokens_b = {kikkoman, sojasaus, 250ml}
-        intersection = {kikkoman, 250ml}  →  score = 2/8 = 0.25
+    Example after alias resolution:
+        'Thin Soy Sauce (Healthy Boy) 700ml'
+        → 'thin soy sauce (dek som boon) 700ml'
+        vs 'Dek Som Boon Dek Som Boon Thin Soy Sauce, 700ml'
+        → tokens both contain {thin, soy, sauce, dek, som, boon, 700ml}
+        → Jaccard = 1.0  (was 0.44 before alias)
     """
     def tokenise(s: str) -> set[str]:
-        return set(re.sub(r"[^a-z0-9]", " ", s.lower()).split())
+        return set(re.sub(r"[^a-z0-9]", " ", _normalize_name(s)).split())
 
     tokens_a = tokenise(name_a)
     tokens_b = tokenise(name_b)
