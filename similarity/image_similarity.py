@@ -51,6 +51,11 @@ HEADERS = {
 TIMEOUT = 15
 CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
 
+# Pairs with combined_score >= this are considered the same product across shops.
+# Calibrated from data: all confirmed same-product pairs score >= 0.62;
+# below that, cross-brand / cross-type pairs start appearing.
+MATCH_THRESHOLD = 0.65
+
 # Load CLIP model once at startup (~350 MB download on first run)
 log.info("Loading CLIP model…")
 _PROCESSOR = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
@@ -85,6 +90,7 @@ def ensure_table(cur):
             IMAGE_SIMILARITY      FLOAT,
             NAME_SIMILARITY       FLOAT,
             COMBINED_SCORE        FLOAT,
+            IS_MATCH              BOOLEAN,
             COMPUTED_AT           TIMESTAMP_NTZ
         )
     """)
@@ -94,6 +100,7 @@ def ensure_table(cur):
         ("IMAGE_SIMILARITY", "FLOAT"),
         ("NAME_SIMILARITY",  "FLOAT"),
         ("COMBINED_SCORE",   "FLOAT"),
+        ("IS_MATCH",         "BOOLEAN"),
     ]:
         cur.execute(f"""
             ALTER TABLE STAGING_SIMILARITY_SCORES
@@ -322,12 +329,13 @@ def run():
             penalty    = _conflict_penalty(name_a, name_b) * _qualifier_penalty(name_a, name_b)
             # Geometric mean scaled by conflict + qualifier penalties
             combined   = round((img_score * name_score) ** 0.5 * penalty, 4)
+            is_match   = combined >= MATCH_THRESHOLD
             similarity_id = str(uuid.uuid4())
-            log.info("  img=%.4f name=%.4f combined=%.4f  %s vs %s",
-                     img_score, name_score, combined, name_a, name_b)
+            log.info("  img=%.4f name=%.4f combined=%.4f is_match=%s  %s vs %s",
+                     img_score, name_score, combined, is_match, name_a, name_b)
             insert_rows.append((
                 similarity_id, scrape_date, shop_a, shop_b, name_a, name_b,
-                url_a, url_b, img_score, name_score, combined, computed_at
+                url_a, url_b, img_score, name_score, combined, is_match, computed_at
             ))
 
         if insert_rows:
@@ -342,8 +350,8 @@ def run():
                      PRODUCT_NAME_1, PRODUCT_NAME_2,
                      IMAGE_URL_1, IMAGE_URL_2,
                      IMAGE_SIMILARITY, NAME_SIMILARITY, COMBINED_SCORE,
-                     COMPUTED_AT)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     IS_MATCH, COMPUTED_AT)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, insert_rows)
             conn.commit()
             total_inserted += len(insert_rows)
