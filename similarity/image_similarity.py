@@ -1,6 +1,6 @@
 """
 Compute pairwise image similarity scores for Kikkoman products.
-# trigger: 2026-05-28b
+# trigger: 2026-05-28c
 
 Flow:
   1. Read distinct products from STAGING.STAGING_PRICES
