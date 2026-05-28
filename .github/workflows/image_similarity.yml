@@ -62,15 +62,9 @@ jobs:
         if: always()
         run: |
           STATUS="${{ job.status }}"
-          if [ "$STATUS" = "success" ]; then
-            ICON="✅"
-          else
-            ICON="❌"
-          fi
+          if [ "$STATUS" = "success" ]; then ICON="✅"; else ICON="❌"; fi
+          MSG="${ICON} *3. Compute - Image Similarity Scores* — ${STATUS}%0ARepo: ${{ github.repository }}%0ATriggered by: ${{ github.event_name }}%0ARun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="${ICON} *3. Compute - Image Similarity Scores* finished with status: *${STATUS}*
-Repo: ${{ github.repository }}
-Triggered by: ${{ github.event_name }}
-Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d text="${MSG}" \
             -d parse_mode="Markdown"
