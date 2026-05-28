@@ -183,23 +183,30 @@ EXCLUSIVE_PAIRS = [
     ("dark", "light"),
     ("sweet", "less salt"),
     ("sweet", "reduced salt"),
+    ("sweet", "tamari"),        # Tamari is savoury/umami, not sweet
+    ("sweet", "dark"),          # Sweet soy sauce vs dark soy sauce are different categories
     ("tamari", "koikuchi"),
     ("usukuchi", "koikuchi"),   # Usukuchi = light soy sauce, Koikuchi = dark/regular
     ("usukuchi", "dark"),
     ("light", "koikuchi"),      # "Light Soy Sauce" vs "Koikuchi" are different types
+    ("asin", "manis"),          # Indonesian: Kecap Asin (salty) vs Kecap Manis (sweet)
+    ("salty", "sweet"),         # English equivalents of the above
 ]
 
 # Use-specific qualifiers — when present in one name but not the other,
 # the products serve different purposes and should not be considered the same.
 QUALIFIER_TERMS = [
     "for rice",
-    "nama",        # unpasteurised — different from regular
-    "ponzu",       # citrus-based — different from plain soy sauce
+    "for seafood",   # use-specific (e.g. Lee Kum Kee Seasoned for Seafood)
+    "nama",          # unpasteurised — different from regular
+    "ponzu",         # citrus-based — different from plain soy sauce
     "teriyaki",
     "sushi",
     "less salt",
     "reduced salt",
     "reduced sodium",
+    "usukuchi",      # pale/light Japanese soy sauce type — if only one name has it, different product
+    "double deluxe", # specific LKK product line, different from Premium Dark/Light
 ]
 
 def _conflict_penalty(name_a: str, name_b: str) -> float:
