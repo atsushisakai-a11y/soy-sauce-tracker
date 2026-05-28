@@ -2,6 +2,11 @@ name: 3. Compute - Image Similarity Scores
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - similarity/image_similarity.py
 
 jobs:
   image-similarity:
