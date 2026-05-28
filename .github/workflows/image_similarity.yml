@@ -34,5 +34,25 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install transformers
 
+      - name: Clear existing similarity scores
+        run: |
+          python - <<'EOF'
+          import os, snowflake.connector
+          conn = snowflake.connector.connect(
+              account=os.environ["SNOWFLAKE_ACCOUNT"],
+              user=os.environ["SNOWFLAKE_USER"],
+              password=os.environ["SNOWFLAKE_PASSWORD"],
+              role=os.environ.get("SNOWFLAKE_ROLE", ""),
+              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+              database=os.environ["SNOWFLAKE_DATABASE"],
+              schema=os.environ["SNOWFLAKE_SCHEMA"],
+          )
+          cur = conn.cursor()
+          cur.execute("DELETE FROM STAGING_SIMILARITY_SCORES")
+          conn.commit()
+          print(f"Deleted {cur.rowcount} rows from STAGING_SIMILARITY_SCORES")
+          conn.close()
+          EOF
+
       - name: Compute image similarity scores
         run: python similarity/image_similarity.py
