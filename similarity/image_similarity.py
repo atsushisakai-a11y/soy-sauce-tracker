@@ -181,12 +181,31 @@ def remove_background(img: Image.Image) -> Image.Image:
         return img.convert("RGB")
 
 
+def remove_dark_liquid(img: Image.Image, threshold: int = 60) -> Image.Image:
+    """Replace near-black pixels (soy sauce liquid visible through glass) with white.
+
+    The dark liquid is the same near-black colour across every soy sauce product,
+    so it dominates DINOv2's embedding and inflates similarity between different
+    products. Replacing these pixels with white forces the model to compare only
+    the discriminative visual features: bottle shape, label design/colour, lid.
+
+    threshold: pixels with R, G, B all below this value are treated as dark liquid.
+    60 captures the near-black soy sauce while keeping coloured label elements.
+    """
+    arr = np.array(img)
+    dark = (arr[:, :, 0] < threshold) & (arr[:, :, 1] < threshold) & (arr[:, :, 2] < threshold)
+    arr[dark] = [255, 255, 255]
+    return Image.fromarray(arr.astype(np.uint8))
+
+
 def download_image(url: str):
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         r.raise_for_status()
         img = Image.open(io.BytesIO(r.content)).convert("RGB")
-        return remove_background(img)
+        img = remove_background(img)    # strip shop background
+        img = remove_dark_liquid(img)   # strip soy sauce liquid inside bottle
+        return img
     except Exception as e:
         log.debug("Failed to download %s: %s", url, e)
         return None
