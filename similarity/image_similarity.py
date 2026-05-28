@@ -189,13 +189,36 @@ EXCLUSIVE_PAIRS = [
     ("light", "koikuchi"),      # "Light Soy Sauce" vs "Koikuchi" are different types
 ]
 
+# Use-specific qualifiers — when present in one name but not the other,
+# the products serve different purposes and should not be considered the same.
+QUALIFIER_TERMS = [
+    "for rice",
+    "nama",        # unpasteurised — different from regular
+    "ponzu",       # citrus-based — different from plain soy sauce
+    "teriyaki",
+    "sushi",
+    "less salt",
+    "reduced salt",
+    "reduced sodium",
+]
+
 def _conflict_penalty(name_a: str, name_b: str) -> float:
-    """Return 0.2 if the names contain mutually exclusive terms, else 1.0."""
+    """Return 0.2 if names contain mutually exclusive terms, else 1.0."""
     a, b = name_a.lower(), name_b.lower()
     for term_x, term_y in EXCLUSIVE_PAIRS:
         if (term_x in a and term_y in b) or (term_y in a and term_x in b):
             log.debug("  Conflict detected: '%s' vs '%s'", term_x, term_y)
             return 0.2
+    return 1.0
+
+
+def _qualifier_penalty(name_a: str, name_b: str) -> float:
+    """Return 0.5 if one name has a use-specific qualifier the other lacks."""
+    a, b = name_a.lower(), name_b.lower()
+    for term in QUALIFIER_TERMS:
+        if (term in a) != (term in b):   # XOR — only one name has it
+            log.debug("  Qualifier mismatch: '%s'", term)
+            return 0.5
     return 1.0
 
 
@@ -288,8 +311,8 @@ def run():
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
             name_score = compute_name_similarity(name_a, name_b)
-            penalty    = _conflict_penalty(name_a, name_b)
-            # Geometric mean scaled by conflict penalty
+            penalty    = _conflict_penalty(name_a, name_b) * _qualifier_penalty(name_a, name_b)
+            # Geometric mean scaled by conflict + qualifier penalties
             combined   = round((img_score * name_score) ** 0.5 * penalty, 4)
             similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f  %s vs %s",
