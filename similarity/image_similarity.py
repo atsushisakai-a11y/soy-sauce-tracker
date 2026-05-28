@@ -39,6 +39,7 @@ import snowflake.connector
 import torch
 from dotenv import load_dotenv
 from PIL import Image
+from rembg import remove as rembg_remove
 from transformers import AutoImageProcessor, AutoModel
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -160,11 +161,31 @@ def _clean_image_url(url: str) -> str:
     return ""
 
 
+def remove_background(img: Image.Image) -> Image.Image:
+    """Strip background from a product image, returning RGB on a white canvas.
+
+    rembg uses a U2Net segmentation model to isolate the foreground object.
+    Compositing onto white ensures DINOv2 sees a consistent background rather
+    than shop-specific props, gradients, or coloured backgrounds that would
+    inflate or deflate cosine similarity unrelated to the product itself.
+    Falls back to the original image if removal fails.
+    """
+    try:
+        rgba = rembg_remove(img.convert("RGBA"))          # transparent background
+        white = Image.new("RGB", rgba.size, (255, 255, 255))
+        white.paste(rgba, mask=rgba.split()[3])            # alpha channel as mask
+        return white
+    except Exception as e:
+        log.warning("  Background removal failed, using original: %s", e)
+        return img.convert("RGB")
+
+
 def download_image(url: str):
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         r.raise_for_status()
-        return Image.open(io.BytesIO(r.content)).convert("RGB")
+        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+        return remove_background(img)
     except Exception as e:
         log.debug("Failed to download %s: %s", url, e)
         return None
