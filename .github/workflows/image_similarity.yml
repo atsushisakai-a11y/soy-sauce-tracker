@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install snowflake-connector-python python-dotenv Pillow requests numpy
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install transformers timm
           pip install rembg onnxruntime
 
