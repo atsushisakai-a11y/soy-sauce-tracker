@@ -1,6 +1,27 @@
 version: 2
 
 sources:
+  - name: staging
+    database: price_monitoring
+    schema: STAGING
+    description: "Staging zone — Python-written tables consumed by dbt models."
+    tables:
+      - name: STAGING_PRODUCT_GROUPS
+        description: >
+          Maps every (shop_name, product_name) to a global_product_id.
+          Products matched by IS_MATCH=TRUE in STAGING_SIMILARITY_SCORES share
+          one UUID; unmatched singletons receive their own unique UUID.
+          Written by similarity/assign_product_ids.py (union-find, UUID5).
+        columns:
+          - name: SHOP_NAME
+            description: "Shop that sells this product."
+          - name: PRODUCT_NAME
+            description: "Product title as scraped."
+          - name: GLOBAL_PRODUCT_ID
+            description: "UUID5 shared by all products in the same matched group."
+          - name: COMPUTED_AT
+            description: "CET timestamp of the last assign_product_ids.py run."
+
   - name: raw
     database: price_monitoring
     schema: RAW
