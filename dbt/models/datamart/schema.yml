@@ -5,12 +5,13 @@ models:
     description: "Datamart — market price summary grouped by global_product_id and scrape date."
     tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [global_product_id, scrape_date]
+          combination_of_columns: [global_product_id, scrape_month]
     columns:
       - name: global_product_id
         description: "UUID shared by products matched across shops via image similarity."
         tests: [not_null]
-      - name: scrape_date
+      - name: scrape_month
+        description: "First day of the month — prices aggregated to year/month granularity."
         tests: [not_null]
       - name: brand
         tests: [not_null]
