@@ -36,6 +36,12 @@ jobs:
           pip install rembg onnxruntime
           pip install dbt-snowflake
 
+      - name: Cache HuggingFace model (DINOv2)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: huggingface-dinov2-base-v1
+
       - name: Clear existing similarity scores
         run: |
           python - <<'EOF'
