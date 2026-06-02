@@ -2,13 +2,11 @@
 
 /*
   DWH — dim_price
-  Dimension table: one row per shop × product combination.
-  global_product_id groups matched products across shops
-  (e.g. Kikkoman Koikuchi 1L from Dun Yong and Shilla Market
-   share the same global_product_id).
+  One row per product — the latest version from dim_price_history.
+  For full attribute history see dim_price_history.
 */
 
-SELECT DISTINCT
+SELECT
     product_id,
     global_product_id,
     shop_name,
@@ -18,6 +16,9 @@ SELECT DISTINCT
     volume_ml,
     currency,
     product_url,
-    image_url                               AS product_image_url
+    product_image_url,
+    valid_from,
+    valid_to
 
-FROM {{ ref('staging_prices') }}
+FROM {{ ref('dim_price_history') }}
+WHERE is_latest = TRUE
