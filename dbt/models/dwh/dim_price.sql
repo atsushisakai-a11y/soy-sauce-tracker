@@ -17,6 +17,7 @@ SELECT DISTINCT
     product_variant,
     volume_ml,
     currency,
-    product_url
+    product_url,
+    image_url                               AS product_image_url
 
 FROM {{ ref('staging_prices') }}
