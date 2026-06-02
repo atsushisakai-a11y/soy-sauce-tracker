@@ -2,13 +2,20 @@ version: 2
 
 models:
   - name: datamart_price_comparison
-    description: "Datamart — market price summary for Kikkoman Koikuchi Shoyu 500ml."
+    description: "Datamart — market price summary grouped by global_product_id and scrape date."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [global_product_id, scrape_date]
     columns:
+      - name: global_product_id
+        description: "UUID shared by products matched across shops via image similarity."
+        tests: [not_null]
       - name: scrape_date
         tests: [not_null]
       - name: brand
         tests: [not_null]
       - name: product_name
+        description: "Representative product name — MAX() across all shops sharing this global_product_id."
         tests: [not_null]
       - name: shop_count
         tests: [not_null]
