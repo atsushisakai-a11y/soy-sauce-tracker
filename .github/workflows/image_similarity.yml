@@ -68,9 +68,6 @@ jobs:
       - name: dbt run - staging_prices (full refresh)
         run: cd dbt && dbt run --full-refresh --select staging_prices
 
-      - name: dbt run - dim_price and fact_price
-        run: cd dbt && dbt run --select dim_price fact_price
-
       - name: Notify Telegram
         if: always()
         run: |
