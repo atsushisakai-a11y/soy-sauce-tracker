@@ -25,4 +25,5 @@ models:
       - name: currency
         tests:
           - accepted_values:
-              values: ["EUR"]
+              arguments:
+                values: ["EUR"]
