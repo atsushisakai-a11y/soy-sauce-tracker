@@ -116,16 +116,7 @@ def run() -> None:
 
     ensure_table(cur)
 
-    # 1. All distinct products from STAGING_PRICES
-    cur.execute("""
-        SELECT DISTINCT shop_name, product_name
-        FROM STAGING_PRICES
-        WHERE shop_name IS NOT NULL AND product_name IS NOT NULL
-    """)
-    all_products: list[tuple[str, str]] = cur.fetchall()
-    log.info("Loaded %d distinct products from STAGING_PRICES.", len(all_products))
-
-    # 2. All IS_MATCH=TRUE pairs from STAGING_SIMILARITY_SCORES
+    # 1. All IS_MATCH=TRUE pairs from STAGING_SIMILARITY_SCORES
     cur.execute("""
         SELECT DISTINCT SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2, PRODUCT_NAME_2
         FROM STAGING_SIMILARITY_SCORES
@@ -134,23 +125,33 @@ def run() -> None:
     match_pairs: list[tuple] = cur.fetchall()
     log.info("Loaded %d IS_MATCH=TRUE pairs.", len(match_pairs))
 
-    # 3. Union-Find
+    if not match_pairs:
+        log.info("No matched pairs — STAGING_PRODUCT_GROUPS will be empty.")
+        cur.execute("DELETE FROM STAGING_PRODUCT_GROUPS")
+        conn.commit()
+        cur.close()
+        conn.close()
+        return
+
+    # 2. Union-Find — only over matched products.
+    #    Unmatched (singleton) products are intentionally excluded; staging_prices.sql
+    #    falls back to product_id via COALESCE when the LEFT JOIN finds no row.
     uf = UnionFind()
 
-    # Seed with all known products as singletons
-    for shop, name in all_products:
-        uf.add(f"{shop}||{name}")
-
-    # Merge matched pairs
     for shop1, name1, shop2, name2 in match_pairs:
-        uf.union(f"{shop1}||{name1}", f"{shop2}||{name2}")
+        node1, node2 = f"{shop1}||{name1}", f"{shop2}||{name2}"
+        uf.add(node1)
+        uf.add(node2)
+        uf.union(node1, node2)
+        log.info("  Matched: [%s] %s  ↔  [%s] %s", shop1, name1, shop2, name2)
 
-    # 4. Build mapping: (shop, name) → global_product_id
+    # 3. Build mapping: one row per matched product → shared global_product_id
     computed_at = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
     insert_rows: list[tuple] = []
 
-    for shop, name in all_products:
-        root = uf.find(f"{shop}||{name}")
+    for node in uf.parent:
+        shop, name = node.split("||", 1)
+        root = uf.find(node)
         global_product_id = str(uuid.uuid5(_UUID_NS, root))
         insert_rows.append((shop, name, global_product_id, computed_at))
 
