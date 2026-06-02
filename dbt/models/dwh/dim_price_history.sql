@@ -44,7 +44,7 @@ ranked AS (
                 -- Prefer clean image URL over JSON-LD object string over empty
                 CASE
                     WHEN product_image_url IS NULL OR product_image_url = '' THEN 0
-                    WHEN product_image_url LIKE '{%'                         THEN 1
+                    WHEN LEFT(product_image_url, 1) = '{'                    THEN 1
                     ELSE 2
                 END DESC,
                 -- Prefer non-null product URL
