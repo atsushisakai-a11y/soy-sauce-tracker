@@ -13,4 +13,4 @@ SELECT
 FROM {{ ref('fact_price') }}  f
 JOIN {{ ref('dim_price') }}   d  ON f.product_id = d.product_id
 
-GROUP BY 1, 2, 4
+GROUP BY 1, 2, 3
