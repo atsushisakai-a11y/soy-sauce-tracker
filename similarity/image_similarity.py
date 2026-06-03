@@ -102,15 +102,15 @@ def ensure_table(client: bigquery.Client) -> None:
 
 
 def fetch_products(client: bigquery.Client):
-    """Return all products from staging_prices that have a non-empty image_url."""
+    """Return all products from raw_kikkoman_prices that have a non-empty image_url."""
     result = client.query(f"""
         SELECT
             DATE(scraped_at) AS scrape_date,
-            brand,
+            'Kikkoman'       AS brand,
             shop_name,
             product_name,
             image_url
-        FROM `{GCP_PROJECT}.staging.staging_prices`
+        FROM `{GCP_PROJECT}.raw.raw_kikkoman_prices`
         WHERE image_url IS NOT NULL
           AND image_url != ''
         ORDER BY scrape_date, brand, shop_name
