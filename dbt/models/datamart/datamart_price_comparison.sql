@@ -3,7 +3,7 @@
 SELECT
     d.brand,
     d.global_product_id,
-    DATE_TRUNC('month', f.scrape_date)      AS scrape_month,
+    DATE_TRUNC(f.scrape_date, MONTH)        AS scrape_month,
     MAX(d.product_name)                     AS product_name,
     COUNT(DISTINCT d.shop_name)             AS shop_count,
     MIN(f.price_eur)                        AS min_price_eur,

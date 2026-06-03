@@ -1,4 +1,4 @@
-name: 90. Find Amsterdam Asian Shops & Load to Snowflake
+name: 90. Find Amsterdam Asian Shops & Load to BigQuery
 
 on:
   workflow_dispatch:
@@ -8,13 +8,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE:  price_monitoring
-      SNOWFLAKE_SCHEMA:    raw
+      GCP_PROJECT: soy-sauce-tracker
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-sa-key.json
 
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +18,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Write GCP service account key
+        run: echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+
       - name: Install dependencies
-        run: pip install requests python-dotenv snowflake-connector-python
+        run: pip install requests python-dotenv google-cloud-bigquery
 
       - name: Find Amsterdam Asian shops
         run: cd scraper && python find_shops.py
@@ -36,8 +34,8 @@ jobs:
           echo "=== first 5 lines of CSV ==="
           head -5 scraper/output/amsterdam_asian_shops.csv
 
-      - name: Load shops to Snowflake
-        run: python loader/load_shops_to_snowflake.py scraper/output/amsterdam_asian_shops.csv
+      - name: Load shops to BigQuery
+        run: python loader/load_shops_to_bigquery.py scraper/output/amsterdam_asian_shops.csv
 
       - uses: actions/upload-artifact@v4
         with:

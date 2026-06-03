@@ -8,11 +8,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      GCP_PROJECT: soy-sauce-tracker
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-sa-key.json
 
     steps:
       - uses: actions/checkout@v4
@@ -21,35 +18,30 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Write GCP service account key
+        run: echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+
       - name: Install dbt
-        run: pip install dbt-snowflake
+        run: pip install dbt-bigquery google-cloud-bigquery
 
       - name: dbt deps
         run: cd dbt && dbt deps
 
-      - name: Check RAW_OSM_SHOPS table in Snowflake
+      - name: Check raw_osm_shops table in BigQuery
         run: |
           python - <<'EOF'
-          import os, snowflake.connector
-          conn = snowflake.connector.connect(
-              account=os.environ["SNOWFLAKE_ACCOUNT"],
-              user=os.environ["SNOWFLAKE_USER"],
-              password=os.environ["SNOWFLAKE_PASSWORD"],
-              role=os.environ.get("SNOWFLAKE_ROLE",""),
-              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-              database="price_monitoring",
-              schema="RAW",
-          )
-          cur = conn.cursor()
-          cur.execute("SHOW TABLES LIKE 'RAW_OSM_SHOPS' IN SCHEMA price_monitoring.RAW")
-          tables = cur.fetchall()
-          print("Tables found:", tables)
-          if tables:
-              cur.execute("DESCRIBE TABLE price_monitoring.RAW.RAW_OSM_SHOPS")
-              print("Columns:", [r[0] for r in cur.fetchall()])
-              cur.execute("SELECT COUNT(*) FROM price_monitoring.RAW.RAW_OSM_SHOPS")
-              print("Row count:", cur.fetchone()[0])
-          conn.close()
+          import os
+          from google.cloud import bigquery
+          client = bigquery.Client(project=os.environ["GCP_PROJECT"])
+          table_ref = "soy-sauce-tracker.raw.raw_osm_shops"
+          try:
+              table = client.get_table(table_ref)
+              print(f"Table found: {table_ref}")
+              print(f"Columns: {[f.name for f in table.schema]}")
+              result = client.query(f"SELECT COUNT(*) FROM `{table_ref}`").result()
+              print(f"Row count: {list(result)[0][0]}")
+          except Exception as e:
+              print(f"Table not found or error: {e}")
           EOF
 
       - name: dbt run - staging_shops

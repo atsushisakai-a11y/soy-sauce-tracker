@@ -11,4 +11,4 @@ SELECT
     OSM_TYPE        AS osm_type,
     _LOADED_AT      AS _loaded_at
 
-FROM {{ source('raw', 'RAW_OSM_SHOPS') }}
+FROM {{ source('raw', 'raw_osm_shops') }}

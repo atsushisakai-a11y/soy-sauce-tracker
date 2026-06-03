@@ -5,8 +5,9 @@ Outputs: scraper/output/kikkoman_prices_<timestamp>.csv
 Detection strategy per shop:
   1. direct_urls         — Shopify shops: fetch specific product handles via .json API
   2. direct_product_urls — HTML shops: fetch specific product page URLs directly
-  3. Shopify JSON API    — search suggest endpoint, then products.json
-  4. HTML search page    — common search URL patterns + schema.org / JSON-LD
+  3. ah_api              — Albert Heijn: anonymous token + mobile-services search API
+  4. Shopify JSON API    — search suggest endpoint, then products.json
+  5. HTML search page    — common search URL patterns + schema.org / JSON-LD
 
 Soy sauce category pages (for manual reference / future updates):
   Shilla Market   : https://shillamarket.com/collections/soy-sauce
@@ -117,7 +118,7 @@ SHOPS = [
     ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
     # Dutch supermarkets
-    {"shop_name": "Albert Heijn",       "website": "https://www.ah.nl"},
+    {"shop_name": "Albert Heijn", "website": "https://www.ah.nl", "strategy": "ah_api"},
     {"shop_name": "Jumbo",              "website": "https://www.jumbo.com"},
     {"shop_name": "PLUS",               "website": "https://www.plus.nl"},
     {"shop_name": "Picnic",             "website": "https://picnic.app"},
@@ -387,6 +388,90 @@ def _try_html_search(shop_name: str, base_url: str, size: str, scrape_run_id: st
 
 
 # ---------------------------------------------------------------------------
+# Albert Heijn API strategy
+# ---------------------------------------------------------------------------
+
+SOY_SAUCE_KEYWORDS = ["shoyu", "soy sauce", "sojasaus"]
+
+def _is_soy_sauce(title: str) -> bool:
+    t = title.lower()
+    return any(k in t for k in SOY_SAUCE_KEYWORDS)
+
+
+def _try_ah_api(shop_name: str, scrape_run_id: str, scraped_at: str) -> list[PriceRecord]:
+    """Use AH anonymous mobile API to search for all soy sauce products."""
+    # Step 1: get anonymous token
+    try:
+        r = requests.post(
+            "https://api.ah.nl/mobile-auth/v1/auth/token/anonymous",
+            json={"clientId": "appie"},
+            headers={"Content-Type": "application/json"},
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        token = r.json().get("access_token", "")
+    except Exception as e:
+        log.warning("AH: could not get token: %s", e)
+        return []
+
+    if not token:
+        log.warning("AH: no access_token in response")
+        return []
+
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+
+    # Step 2: search for each keyword to catch Dutch and English names
+    seen_titles: set[str] = set()
+    records: list[PriceRecord] = []
+
+    for query in ["sojasaus", "shoyu", "soy sauce"]:
+        try:
+            r = requests.get(
+                "https://api.ah.nl/mobile-services/product/search/v2",
+                params={"query": query, "size": 50},
+                headers=auth_headers,
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            log.debug("AH search '%s' failed: %s", query, e)
+            continue
+
+        # Response can be cards[].products[] or a flat products[] list
+        products = []
+        for card in data.get("cards", []):
+            products.extend(card.get("products", []))
+        products = products or data.get("products", [])
+
+        for product in products:
+            title = product.get("title", "")
+            if not _is_soy_sauce(title):
+                continue
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+
+            price_info = product.get("price", {})
+            price_now = price_info.get("now", "")
+            raw_price = f"€{float(price_now):.2f}" if price_now != "" else ""
+
+            images = product.get("images", [])
+            image_url = images[0].get("url", "") if images else ""
+
+            link = product.get("link", "")
+            product_url = f"https://www.ah.nl{link}" if link else ""
+
+            records.append(_make_record(
+                shop_name, title, raw_price, "EUR",
+                product_url, image_url, scrape_run_id, scraped_at,
+            ))
+            log.info("  ✓ %s — %s", title, raw_price)
+
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -401,6 +486,10 @@ def scrape_shop(shop: dict, scrape_run_id: str, scraped_at: str) -> list[PriceRe
     # HTML shops: fetch specific product page URLs directly
     if shop.get("direct_product_urls"):
         return _scrape_html_product_pages(shop_name, shop["direct_product_urls"], scrape_run_id, scraped_at)
+
+    # Albert Heijn: anonymous token + mobile-services search API
+    if shop.get("strategy") == "ah_api":
+        return _try_ah_api(shop_name, scrape_run_id, scraped_at)
 
     found = []
     for size in TARGET_SIZES:

@@ -19,7 +19,7 @@ Combined score: IMAGE_SIMILARITY × penalties
   of the image score; NAME_SIMILARITY is computed and stored for reference only.
 
 Usage:
-    pip install snowflake-connector-python python-dotenv \
+    pip install google-cloud-bigquery python-dotenv \
                 transformers torch Pillow requests numpy
     python similarity/image_similarity.py
 """
@@ -36,9 +36,9 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import requests
-import snowflake.connector
 import torch
 from dotenv import load_dotenv
+from google.cloud import bigquery
 from PIL import Image
 from rembg import remove as rembg_remove
 from transformers import AutoImageProcessor, AutoModel
@@ -47,6 +47,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
+TABLE_ID    = f"{GCP_PROJECT}.staging.staging_similarity_scores"
 
 HEADERS = {
     "User-Agent": (
@@ -74,77 +77,57 @@ _MODEL.eval()
 log.info("DINOv2 model ready.")
 
 
-def get_conn():
-    return snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
-        role=os.environ.get("SNOWFLAKE_ROLE", ""),
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        database=os.environ["SNOWFLAKE_DATABASE"],
-        schema="STAGING",
-    )
+def get_client():
+    return bigquery.Client(project=GCP_PROJECT)
 
 
-def ensure_table(cur):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS STAGING_SIMILARITY_SCORES (
-            SIMILARITY_ID         VARCHAR(36),
+def ensure_table(client: bigquery.Client) -> None:
+    client.query(f"""
+        CREATE TABLE IF NOT EXISTS `{TABLE_ID}` (
+            SIMILARITY_ID         STRING,
             SCRAPE_DATE           DATE,
-            SHOP_NAME_1           VARCHAR(255),
-            SHOP_NAME_2           VARCHAR(255),
-            PRODUCT_NAME_1        VARCHAR(500),
-            PRODUCT_NAME_2        VARCHAR(500),
-            IMAGE_URL_1           VARCHAR(2000),
-            IMAGE_URL_2           VARCHAR(2000),
-            IMAGE_SIMILARITY      FLOAT,
-            NAME_SIMILARITY       FLOAT,
-            COMBINED_SCORE        FLOAT,
-            IS_MATCH              BOOLEAN,
-            COMPUTED_AT           TIMESTAMP_NTZ
+            SHOP_NAME_1           STRING,
+            SHOP_NAME_2           STRING,
+            PRODUCT_NAME_1        STRING,
+            PRODUCT_NAME_2        STRING,
+            IMAGE_URL_1           STRING,
+            IMAGE_URL_2           STRING,
+            IMAGE_SIMILARITY      FLOAT64,
+            NAME_SIMILARITY       FLOAT64,
+            COMBINED_SCORE        FLOAT64,
+            IS_MATCH              BOOL,
+            COMPUTED_AT           TIMESTAMP
         )
-    """)
-    # Add new columns if table already existed without them
-    for col, dtype in [
-        ("SIMILARITY_ID",    "VARCHAR(36)"),
-        ("IMAGE_SIMILARITY", "FLOAT"),
-        ("NAME_SIMILARITY",  "FLOAT"),
-        ("COMBINED_SCORE",   "FLOAT"),
-        ("IS_MATCH",         "BOOLEAN"),
-    ]:
-        cur.execute(f"""
-            ALTER TABLE STAGING_SIMILARITY_SCORES
-            ADD COLUMN IF NOT EXISTS {col} {dtype}
-        """)
+    """).result()
 
 
-def fetch_products(cur):
+def fetch_products(client: bigquery.Client):
     """Return all products from staging_prices that have a non-empty image_url."""
-    cur.execute("""
+    result = client.query(f"""
         SELECT
             DATE(scraped_at) AS scrape_date,
             brand,
             shop_name,
             product_name,
             image_url
-        FROM STAGING_PRICES
+        FROM `{GCP_PROJECT}.staging.staging_prices`
         WHERE image_url IS NOT NULL
           AND image_url != ''
         ORDER BY scrape_date, brand, shop_name
-    """)
-    return cur.fetchall()
+    """).result()
+    return [tuple(row) for row in result]
 
 
-def fetch_processed_dates(cur):
+def fetch_processed_dates(client: bigquery.Client):
     """Return scrape_dates where ALL pairs were successfully computed.
     A date is considered complete only if the number of rows > 1.
     Single-pair dates may be incomplete due to image download failures."""
-    cur.execute("""
+    result = client.query(f"""
         SELECT scrape_date, COUNT(*) AS pair_count
-        FROM STAGING_SIMILARITY_SCORES
+        FROM `{TABLE_ID}`
         GROUP BY scrape_date
-    """)
-    rows = cur.fetchall()
+    """).result()
+    rows = [tuple(row) for row in result]
     return {row[0] for row in rows if row[1] > 1}
 
 
@@ -472,25 +455,23 @@ def compute_name_similarity(name_a: str, name_b: str) -> float:
 
 
 def run():
-    conn = get_conn()
-    cur = conn.cursor()
+    client = get_client()
 
-    ensure_table(cur)
+    ensure_table(client)
 
     # Remove any same-shop pairs inserted before this filter was added
-    cur.execute("""
-        DELETE FROM STAGING_SIMILARITY_SCORES
+    client.query(f"""
+        DELETE FROM `{TABLE_ID}`
         WHERE SHOP_NAME_1 = SHOP_NAME_2
-    """)
-    conn.commit()
-    log.info("Removed same-shop pairs from STAGING_SIMILARITY_SCORES.")
+    """).result()
+    log.info("Removed same-shop pairs from staging_similarity_scores.")
 
-    rows = fetch_products(cur)
+    rows = fetch_products(client)
     if not rows:
-        log.info("No products with image_url found in STAGING_PRICES.")
+        log.info("No products with image_url found in staging_prices.")
         return
 
-    processed_dates = fetch_processed_dates(cur)
+    processed_dates = fetch_processed_dates(client)
 
     # Group by (scrape_date, brand)
     groups: dict[tuple, list] = {}
@@ -541,37 +522,40 @@ def run():
                          * _name_mismatch_penalty(name_score))
             # Image similarity × text penalties (name not in base score)
             combined   = round(img_score * penalty, 4)
-            is_match   = combined >= MATCH_THRESHOLD
+            is_match   = bool(combined >= MATCH_THRESHOLD)
             similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f is_match=%s  %s vs %s",
                      img_score, name_score, combined, is_match, name_a, name_b)
-            insert_rows.append((
-                similarity_id, scrape_date, shop_a, shop_b, name_a, name_b,
-                url_a, url_b, img_score, name_score, combined, is_match, computed_at
-            ))
+            insert_rows.append({
+                "SIMILARITY_ID":    similarity_id,
+                "SCRAPE_DATE":      str(scrape_date),
+                "SHOP_NAME_1":      shop_a,
+                "SHOP_NAME_2":      shop_b,
+                "PRODUCT_NAME_1":   name_a,
+                "PRODUCT_NAME_2":   name_b,
+                "IMAGE_URL_1":      url_a,
+                "IMAGE_URL_2":      url_b,
+                "IMAGE_SIMILARITY": img_score,
+                "NAME_SIMILARITY":  name_score,
+                "COMBINED_SCORE":   combined,
+                "IS_MATCH":         is_match,
+                "COMPUTED_AT":      computed_at,
+            })
 
         if insert_rows:
             # Remove any incomplete rows from a previous failed run for this date
-            cur.execute("""
-                DELETE FROM STAGING_SIMILARITY_SCORES WHERE SCRAPE_DATE = %s
-            """, (scrape_date,))
+            client.query(f"""
+                DELETE FROM `{TABLE_ID}` WHERE SCRAPE_DATE = '{scrape_date}'
+            """).result()
 
-            cur.executemany("""
-                INSERT INTO STAGING_SIMILARITY_SCORES
-                    (SIMILARITY_ID, SCRAPE_DATE, SHOP_NAME_1, SHOP_NAME_2,
-                     PRODUCT_NAME_1, PRODUCT_NAME_2,
-                     IMAGE_URL_1, IMAGE_URL_2,
-                     IMAGE_SIMILARITY, NAME_SIMILARITY, COMBINED_SCORE,
-                     IS_MATCH, COMPUTED_AT)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, insert_rows)
-            conn.commit()
+            job_config = bigquery.LoadJobConfig(
+                write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+            )
+            client.load_table_from_json(insert_rows, TABLE_ID, job_config=job_config).result()
             total_inserted += len(insert_rows)
             log.info("  Inserted %d pairs.", len(insert_rows))
 
     log.info("Done. Total pairs inserted: %d", total_inserted)
-    cur.close()
-    conn.close()
 
 
 if __name__ == "__main__":

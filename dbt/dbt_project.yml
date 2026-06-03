@@ -20,14 +20,14 @@ dispatch:
 models:
   kikkoman_price_tracker:
     raw:
-      +schema: RAW
+      +schema: raw
       +materialized: view
     staging:
-      +schema: STAGING
+      +schema: staging
       +materialized: table
     dwh:
-      +schema: DWH
+      +schema: dwh
       +materialized: table
     datamart:
-      +schema: DATAMART
+      +schema: datamart
       +materialized: view

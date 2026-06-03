@@ -12,5 +12,5 @@ SELECT
 FROM {{ ref('staging_prices') }}
 
 {% if is_incremental() %}
-WHERE scraped_at > (SELECT MAX(scrape_date) FROM {{ this }})
+WHERE DATE(scraped_at) > (SELECT MAX(scrape_date) FROM {{ this }})
 {% endif %}

@@ -13,13 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE:  price_monitoring
-      SNOWFLAKE_SCHEMA:    STAGING
+      GCP_PROJECT: soy-sauce-tracker
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-sa-key.json
 
     steps:
       - uses: actions/checkout@v4
@@ -28,13 +23,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Write GCP service account key
+        run: echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+
       - name: Install dependencies
         run: |
-          pip install snowflake-connector-python python-dotenv Pillow requests numpy
+          pip install google-cloud-bigquery python-dotenv Pillow requests numpy
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install transformers timm
           pip install rembg onnxruntime
-          pip install dbt-snowflake
+          pip install dbt-bigquery
 
       - name: Cache HuggingFace model (DINOv2)
         uses: actions/cache@v4
@@ -45,21 +43,19 @@ jobs:
       - name: Clear existing similarity scores
         run: |
           python - <<'EOF'
-          import os, snowflake.connector
-          conn = snowflake.connector.connect(
-              account=os.environ["SNOWFLAKE_ACCOUNT"],
-              user=os.environ["SNOWFLAKE_USER"],
-              password=os.environ["SNOWFLAKE_PASSWORD"],
-              role=os.environ.get("SNOWFLAKE_ROLE", ""),
-              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-              database=os.environ["SNOWFLAKE_DATABASE"],
-              schema=os.environ["SNOWFLAKE_SCHEMA"],
-          )
-          cur = conn.cursor()
-          cur.execute("DELETE FROM STAGING_SIMILARITY_SCORES")
-          conn.commit()
-          print(f"Deleted {cur.rowcount} rows from STAGING_SIMILARITY_SCORES")
-          conn.close()
+          from google.cloud import bigquery
+          client = bigquery.Client(project="soy-sauce-tracker")
+          TABLE = "soy-sauce-tracker.staging.staging_similarity_scores"
+          client.query(f"""
+              CREATE TABLE IF NOT EXISTS `{TABLE}` (
+                  SIMILARITY_ID STRING, SCRAPE_DATE DATE, SHOP_NAME_1 STRING, SHOP_NAME_2 STRING,
+                  PRODUCT_NAME_1 STRING, PRODUCT_NAME_2 STRING, IMAGE_URL_1 STRING, IMAGE_URL_2 STRING,
+                  IMAGE_SIMILARITY FLOAT64, NAME_SIMILARITY FLOAT64, COMBINED_SCORE FLOAT64,
+                  IS_MATCH BOOL, COMPUTED_AT TIMESTAMP
+              )
+          """).result()
+          client.query(f"TRUNCATE TABLE `{TABLE}`").result()
+          print("Truncated staging_similarity_scores")
           EOF
 
       - name: Compute image similarity scores

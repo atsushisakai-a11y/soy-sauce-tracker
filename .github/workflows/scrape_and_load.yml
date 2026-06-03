@@ -1,4 +1,4 @@
-name: 1. Scrape - Kikkoman Prices & Load to Snowflake
+name: 1. Scrape - Kikkoman Prices & Load to BigQuery
 
 on:
   workflow_dispatch:
@@ -8,13 +8,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE:  price_monitoring
-      SNOWFLAKE_SCHEMA:    raw
+      GCP_PROJECT: soy-sauce-tracker
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-sa-key.json
 
     steps:
       - uses: actions/checkout@v4
@@ -23,17 +18,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Write GCP service account key
+        run: echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-sa-key.json
+
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 lxml snowflake-connector-python python-dotenv
+        run: pip install requests beautifulsoup4 lxml google-cloud-bigquery python-dotenv
 
       - name: Run scraper
         run: cd scraper && python scraper.py
 
-      - name: Load CSV to Snowflake
+      - name: Load CSV to BigQuery
         run: |
           CSV=$(ls scraper/output/kikkoman_prices_*.csv | tail -1)
           echo "Loading $CSV"
-          python loader/load_to_snowflake.py "$CSV"
+          python loader/load_to_bigquery.py "$CSV"
 
       - uses: actions/upload-artifact@v4
         with:

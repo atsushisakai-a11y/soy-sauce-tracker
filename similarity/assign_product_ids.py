@@ -27,8 +27,8 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import snowflake.connector
 from dotenv import load_dotenv
+from google.cloud import bigquery
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -80,30 +80,28 @@ class UnionFind:
 
 
 # ---------------------------------------------------------------------------
-# Snowflake helpers
+# BigQuery helpers
 # ---------------------------------------------------------------------------
 
-def get_conn():
-    return snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
-        role=os.environ.get("SNOWFLAKE_ROLE", ""),
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        database="price_monitoring",
-        schema="STAGING",
-    )
+GCP_PROJECT       = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
+TABLE_ID          = f"{GCP_PROJECT}.staging.staging_product_groups"
+SIMILARITY_TABLE  = f"{GCP_PROJECT}.staging.staging_similarity_scores"
+PRICES_TABLE      = f"{GCP_PROJECT}.staging.staging_prices"
 
 
-def ensure_table(cur) -> None:
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS STAGING_PRODUCT_GROUPS (
-            SHOP_NAME         VARCHAR(255),
-            PRODUCT_NAME      VARCHAR(500),
-            GLOBAL_PRODUCT_ID VARCHAR(36),
-            COMPUTED_AT       TIMESTAMP_NTZ
+def get_client():
+    return bigquery.Client(project=GCP_PROJECT)
+
+
+def ensure_table(client: bigquery.Client) -> None:
+    client.query(f"""
+        CREATE TABLE IF NOT EXISTS `{TABLE_ID}` (
+            SHOP_NAME         STRING,
+            PRODUCT_NAME      STRING,
+            GLOBAL_PRODUCT_ID STRING,
+            COMPUTED_AT       TIMESTAMP
         )
-    """)
+    """).result()
 
 
 # ---------------------------------------------------------------------------
@@ -111,26 +109,22 @@ def ensure_table(cur) -> None:
 # ---------------------------------------------------------------------------
 
 def run() -> None:
-    conn = get_conn()
-    cur  = conn.cursor()
+    client = get_client()
 
-    ensure_table(cur)
+    ensure_table(client)
 
-    # 1. All IS_MATCH=TRUE pairs from STAGING_SIMILARITY_SCORES
-    cur.execute("""
+    # 1. All IS_MATCH=TRUE pairs from staging_similarity_scores
+    result = client.query(f"""
         SELECT DISTINCT SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2, PRODUCT_NAME_2
-        FROM STAGING_SIMILARITY_SCORES
+        FROM `{SIMILARITY_TABLE}`
         WHERE IS_MATCH = TRUE
-    """)
-    match_pairs: list[tuple] = cur.fetchall()
+    """).result()
+    match_pairs: list[tuple] = [tuple(row) for row in result]
     log.info("Loaded %d IS_MATCH=TRUE pairs.", len(match_pairs))
 
     if not match_pairs:
-        log.info("No matched pairs — STAGING_PRODUCT_GROUPS will be empty.")
-        cur.execute("DELETE FROM STAGING_PRODUCT_GROUPS")
-        conn.commit()
-        cur.close()
-        conn.close()
+        log.info("No matched pairs — staging_product_groups will be empty.")
+        client.query(f"TRUNCATE TABLE `{TABLE_ID}`").result()
         return
 
     # 2. Union-Find — only over matched products.
@@ -147,23 +141,26 @@ def run() -> None:
 
     # 3. Build mapping: one row per matched product → shared global_product_id
     computed_at = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
-    insert_rows: list[tuple] = []
+    bq_rows: list[dict] = []
 
     for node in uf.parent:
         shop, name = node.split("||", 1)
         root = uf.find(node)
         global_product_id = str(uuid.uuid5(_UUID_NS, root))
-        insert_rows.append((shop, name, global_product_id, computed_at))
+        bq_rows.append({
+            "SHOP_NAME":         shop,
+            "PRODUCT_NAME":      name,
+            "GLOBAL_PRODUCT_ID": global_product_id,
+            "COMPUTED_AT":       computed_at,
+        })
 
     # 5. Full refresh
-    cur.execute("DELETE FROM STAGING_PRODUCT_GROUPS")
-    cur.executemany("""
-        INSERT INTO STAGING_PRODUCT_GROUPS
-            (SHOP_NAME, PRODUCT_NAME, GLOBAL_PRODUCT_ID, COMPUTED_AT)
-        VALUES (%s, %s, %s, %s)
-    """, insert_rows)
-    conn.commit()
-    log.info("Wrote %d rows to STAGING_PRODUCT_GROUPS.", len(insert_rows))
+    client.query(f"TRUNCATE TABLE `{TABLE_ID}`").result()
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+    )
+    client.load_table_from_json(bq_rows, TABLE_ID, job_config=job_config).result()
+    log.info("Wrote %d rows to staging_product_groups.", len(bq_rows))
 
     # 6. Summary — log multi-product groups (cross-shop matches)
     groups = uf.components()
@@ -175,9 +172,6 @@ def run() -> None:
         for node in sorted(nodes):
             shop, name = node.split("||", 1)
             log.info("    [%s] %s", shop, name)
-
-    cur.close()
-    conn.close()
 
 
 if __name__ == "__main__":

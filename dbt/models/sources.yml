@@ -2,71 +2,49 @@ version: 2
 
 sources:
   - name: staging
-    database: price_monitoring
-    schema: STAGING
+    database: soy-sauce-tracker
+    schema: staging
     description: "Staging zone — Python-written tables consumed by dbt models."
     tables:
-      - name: STAGING_PRODUCT_GROUPS
+      - name: staging_product_groups
         description: >
           Maps every (shop_name, product_name) to a global_product_id.
-          Products matched by IS_MATCH=TRUE in STAGING_SIMILARITY_SCORES share
+          Products matched by IS_MATCH=TRUE in staging_similarity_scores share
           one UUID; unmatched singletons receive their own unique UUID.
           Written by similarity/assign_product_ids.py (union-find, UUID5).
         columns:
           - name: SHOP_NAME
-            description: "Shop that sells this product."
           - name: PRODUCT_NAME
-            description: "Product title as scraped."
           - name: GLOBAL_PRODUCT_ID
-            description: "UUID5 shared by all products in the same matched group."
           - name: COMPUTED_AT
-            description: "CET timestamp of the last assign_product_ids.py run."
 
   - name: raw
-    database: price_monitoring
-    schema: RAW
+    database: soy-sauce-tracker
+    schema: raw
     description: "Raw landing zone — data loaded directly from the scraper CSV."
     tables:
-      - name: RAW_OSM_SHOPS
+      - name: raw_osm_shops
         description: "Amsterdam Asian shops discovered via OpenStreetMap — full refresh on every run."
         columns:
           - name: NAME
-            description: "Shop name."
           - name: ADDRESS
-            description: "Street address."
           - name: WEBSITE
-            description: "Shop website URL (may be empty)."
           - name: PHONE
-            description: "Phone number (may be empty)."
           - name: CUISINE
-            description: "Cuisine tags from OpenStreetMap."
           - name: SHOP_TYPE
-            description: "OSM shop tag value, e.g. supermarket, convenience."
           - name: OSM_ID
-            description: "OpenStreetMap element ID."
           - name: OSM_TYPE
-            description: "OSM element type: node or way."
           - name: _LOADED_AT
-            description: "UTC timestamp when the row was inserted into Snowflake."
 
       - name: raw_kikkoman_prices
-        description: "One row per shop per scrape run for Kikkoman Koikuchi Shoyu 500ml."
+        description: "One row per shop per scrape run."
         columns:
           - name: scrape_run_id
-            description: "UUID shared by all shops scraped in the same run."
           - name: shop_name
-            description: "Name of the online shop."
           - name: product_name
-            description: "Product title as shown on the shop's website."
           - name: raw_price
-            description: "Price string exactly as scraped, e.g. '€5,65'."
           - name: currency
-            description: "Currency code, typically EUR."
           - name: product_url
-            description: "Direct URL to the product page."
           - name: image_url
-            description: "URL of the product image."
           - name: scraped_at
-            description: "UTC timestamp when the scraper fetched this price."
           - name: _loaded_at
-            description: "UTC timestamp when the row was inserted into Snowflake."
