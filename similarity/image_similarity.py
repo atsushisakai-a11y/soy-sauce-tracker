@@ -468,7 +468,7 @@ def run():
 
     rows = fetch_products(client)
     if not rows:
-        log.info("No products with image_url found in staging_prices.")
+        log.info("No products with image_url found in raw_kikkoman_prices.")
         return
 
     processed_dates = fetch_processed_dates(client)
