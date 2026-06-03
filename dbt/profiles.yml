@@ -13,4 +13,4 @@ kikkoman_price_tracker:
       keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
       threads: 4
       timeout_seconds: 300
-      location: EU
+      location: europe-west4
