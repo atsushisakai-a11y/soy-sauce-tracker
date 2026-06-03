@@ -32,6 +32,23 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
+      - name: Bootstrap staging_product_groups if not exists
+        run: |
+          pip install google-cloud-bigquery
+          python - <<'EOF'
+          from google.cloud import bigquery
+          client = bigquery.Client(project="soy-sauce-tracker")
+          client.query("""
+              CREATE TABLE IF NOT EXISTS `soy-sauce-tracker.staging.staging_product_groups` (
+                  SHOP_NAME         STRING,
+                  PRODUCT_NAME      STRING,
+                  GLOBAL_PRODUCT_ID STRING,
+                  COMPUTED_AT       TIMESTAMP
+              )
+          """).result()
+          print("staging_product_groups is ready.")
+          EOF
+
       - name: dbt run - staging_prices
         run: |
           FLAGS=""
