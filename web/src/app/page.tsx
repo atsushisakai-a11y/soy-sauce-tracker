@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+import Link from "next/link";
 import type { PriceRow } from "@/app/api/prices/route";
 import {
   pivotForTrend,
@@ -11,6 +14,45 @@ import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
 
 export const revalidate = 3600;
+
+function DbtSummaryCard() {
+  try {
+    const p = path.join(process.cwd(), "public/dbt-docs/summary.json");
+    const s = JSON.parse(fs.readFileSync(p, "utf-8"));
+    const allPass = s.failed === 0 && s.warned === 0;
+    return (
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <span className="text-3xl">{allPass ? "✅" : "❌"}</span>
+          <div>
+            <h3 className="font-semibold text-stone-800 text-sm">dbt Data Quality</h3>
+            <p className="text-xs text-stone-400 mt-0.5">
+              {s.passed}/{s.total} tests passing · {s.models} models · 4 layers (raw → staging → dwh → datamart)
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <Link
+            href="/dbt"
+            className="text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-lg px-3 py-1.5 font-medium hover:bg-orange-100 transition-colors"
+          >
+            Test Results →
+          </Link>
+          <a
+            href="/dbt-docs/index.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-700 transition-colors"
+          >
+            Lineage DAG ↗
+          </a>
+        </div>
+      </div>
+    );
+  } catch {
+    return null;
+  }
+}
 
 async function fetchPrices(): Promise<PriceRow[]> {
   // In production (Vercel) the API route runs on the same host.
@@ -92,6 +134,9 @@ export default async function Home() {
 
         {/* Full table */}
         <PriceTable rows={rows} />
+
+        {/* dbt quality card */}
+        <DbtSummaryCard />
 
         {/* Footer */}
         <footer className="text-center text-xs text-stone-300 py-4">

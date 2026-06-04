@@ -1,0 +1,262 @@
+{
+  "generated_at": "2026-06-04T07:27:16.018372Z",
+  "total": 42,
+  "passed": 42,
+  "failed": 0,
+  "warned": 0,
+  "tests": [
+    {
+      "name": "1c02b210b7",
+      "model": "accepted_values_staging_prices_currency__EUR",
+      "status": "pass",
+      "execution_time": 1.27
+    },
+    {
+      "name": "33c489ea1f",
+      "model": "dbt_utils_accepted_range_staging_prices_price_eur__50_0__0_01",
+      "status": "pass",
+      "execution_time": 1.2
+    },
+    {
+      "name": "bc9e82def0",
+      "model": "dbt_utils_unique_combination_of_columns_datamart_price_comparison_global_product_id__scrape_month",
+      "status": "pass",
+      "execution_time": 1.87
+    },
+    {
+      "name": "9bbc98798d",
+      "model": "not_null_datamart_price_comparison_avg_price_eur",
+      "status": "pass",
+      "execution_time": 1.49
+    },
+    {
+      "name": "d1d9f50ca6",
+      "model": "not_null_datamart_price_comparison_brand",
+      "status": "pass",
+      "execution_time": 1.14
+    },
+    {
+      "name": "741dfb7eb2",
+      "model": "not_null_datamart_price_comparison_global_product_id",
+      "status": "pass",
+      "execution_time": 1.27
+    },
+    {
+      "name": "c24e108d4e",
+      "model": "not_null_datamart_price_comparison_max_price_eur",
+      "status": "pass",
+      "execution_time": 1.27
+    },
+    {
+      "name": "f3d1568f1e",
+      "model": "not_null_datamart_price_comparison_min_price_eur",
+      "status": "pass",
+      "execution_time": 1.06
+    },
+    {
+      "name": "23495a471c",
+      "model": "not_null_datamart_price_comparison_product_name",
+      "status": "pass",
+      "execution_time": 1.25
+    },
+    {
+      "name": "db83cefa3f",
+      "model": "not_null_datamart_price_comparison_scrape_month",
+      "status": "pass",
+      "execution_time": 0.95
+    },
+    {
+      "name": "2e4a56e652",
+      "model": "not_null_datamart_price_comparison_shop_count",
+      "status": "pass",
+      "execution_time": 1.14
+    },
+    {
+      "name": "991eb7104c",
+      "model": "not_null_dim_price_brand",
+      "status": "pass",
+      "execution_time": 0.76
+    },
+    {
+      "name": "e5c9d23281",
+      "model": "not_null_dim_price_global_product_id",
+      "status": "pass",
+      "execution_time": 0.8
+    },
+    {
+      "name": "faafdaff60",
+      "model": "not_null_dim_price_history_brand",
+      "status": "pass",
+      "execution_time": 0.89
+    },
+    {
+      "name": "0048938705",
+      "model": "not_null_dim_price_history_global_product_id",
+      "status": "pass",
+      "execution_time": 0.94
+    },
+    {
+      "name": "7102115c3e",
+      "model": "not_null_dim_price_history_is_latest",
+      "status": "pass",
+      "execution_time": 0.82
+    },
+    {
+      "name": "fd44e53c73",
+      "model": "not_null_dim_price_history_product_id",
+      "status": "pass",
+      "execution_time": 1.01
+    },
+    {
+      "name": "178aabc97d",
+      "model": "not_null_dim_price_history_product_name",
+      "status": "pass",
+      "execution_time": 0.71
+    },
+    {
+      "name": "3c2193bfe2",
+      "model": "not_null_dim_price_history_shop_name",
+      "status": "pass",
+      "execution_time": 0.72
+    },
+    {
+      "name": "f016291af5",
+      "model": "not_null_dim_price_history_valid_from",
+      "status": "pass",
+      "execution_time": 0.81
+    },
+    {
+      "name": "1a7bfacccd",
+      "model": "not_null_dim_price_history_valid_to",
+      "status": "pass",
+      "execution_time": 1.14
+    },
+    {
+      "name": "e4253394f2",
+      "model": "not_null_dim_price_history_volume_ml",
+      "status": "pass",
+      "execution_time": 0.9
+    },
+    {
+      "name": "dba05458e5",
+      "model": "not_null_dim_price_product_id",
+      "status": "pass",
+      "execution_time": 0.86
+    },
+    {
+      "name": "ad2a441a93",
+      "model": "not_null_dim_price_product_name",
+      "status": "pass",
+      "execution_time": 0.95
+    },
+    {
+      "name": "17c152c6ba",
+      "model": "not_null_dim_price_shop_name",
+      "status": "pass",
+      "execution_time": 1.02
+    },
+    {
+      "name": "f12251f5cb",
+      "model": "not_null_dim_price_valid_from",
+      "status": "pass",
+      "execution_time": 1.18
+    },
+    {
+      "name": "2ddeb1017f",
+      "model": "not_null_dim_price_valid_to",
+      "status": "pass",
+      "execution_time": 1.08
+    },
+    {
+      "name": "344b1593d9",
+      "model": "not_null_dim_price_volume_ml",
+      "status": "pass",
+      "execution_time": 0.8
+    },
+    {
+      "name": "cf42232e82",
+      "model": "not_null_fact_price_price_eur",
+      "status": "pass",
+      "execution_time": 1.0
+    },
+    {
+      "name": "4586b67c54",
+      "model": "not_null_fact_price_product_id",
+      "status": "pass",
+      "execution_time": 0.81
+    },
+    {
+      "name": "9a56714864",
+      "model": "not_null_fact_price_scrape_date",
+      "status": "pass",
+      "execution_time": 1.06
+    },
+    {
+      "name": "4f5cde68b0",
+      "model": "not_null_fact_price_scrape_run_id",
+      "status": "pass",
+      "execution_time": 0.72
+    },
+    {
+      "name": "6df51e2034",
+      "model": "not_null_raw_kikkoman_prices_raw_price",
+      "status": "pass",
+      "execution_time": 0.87
+    },
+    {
+      "name": "c6b28f3103",
+      "model": "not_null_raw_kikkoman_prices_scraped_at",
+      "status": "pass",
+      "execution_time": 0.87
+    },
+    {
+      "name": "18ccb6c435",
+      "model": "not_null_raw_kikkoman_prices_shop_name",
+      "status": "pass",
+      "execution_time": 0.87
+    },
+    {
+      "name": "22d4f438bb",
+      "model": "not_null_staging_prices_brand",
+      "status": "pass",
+      "execution_time": 0.79
+    },
+    {
+      "name": "e34ca88544",
+      "model": "not_null_staging_prices_price_eur",
+      "status": "pass",
+      "execution_time": 0.83
+    },
+    {
+      "name": "5f905a0b48",
+      "model": "not_null_staging_prices_price_per_100ml_eur",
+      "status": "pass",
+      "execution_time": 1.09
+    },
+    {
+      "name": "5b2ce66c56",
+      "model": "not_null_staging_prices_product_variant",
+      "status": "pass",
+      "execution_time": 1.24
+    },
+    {
+      "name": "e49596fa18",
+      "model": "not_null_staging_prices_shop_name",
+      "status": "pass",
+      "execution_time": 0.71
+    },
+    {
+      "name": "dc537833e9",
+      "model": "not_null_staging_prices_volume_ml",
+      "status": "pass",
+      "execution_time": 0.7
+    },
+    {
+      "name": "8d3746f5de",
+      "model": "unique_dim_price_product_id",
+      "status": "pass",
+      "execution_time": 0.86
+    }
+  ],
+  "models": 8
+}
