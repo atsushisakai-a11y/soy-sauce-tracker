@@ -72,7 +72,7 @@ export default function DbtPage() {
             </p>
           </div>
           <a
-            href="/dbt-docs/index.html"
+            href="https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
@@ -157,7 +157,7 @@ export default function DbtPage() {
             Explore the full model lineage, column-level documentation, and source definitions in the dbt docs interface.
           </p>
           <a
-            href="/dbt-docs/index.html"
+            href="https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors"

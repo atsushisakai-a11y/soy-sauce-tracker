@@ -39,7 +39,7 @@ function DbtSummaryCard() {
             Test Results →
           </Link>
           <a
-            href="/dbt-docs/index.html"
+            href="https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-700 transition-colors"
