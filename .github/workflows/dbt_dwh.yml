@@ -2,6 +2,11 @@ name: 4. dbt - Run DWH Models
 
 on:
   workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: "Full refresh (rebuilds tables from scratch — use when product_id keys change)"
+        type: boolean
+        default: false
 
 jobs:
   dbt-dwh:
@@ -28,7 +33,10 @@ jobs:
         run: cd dbt && dbt deps
 
       - name: dbt run - dim_price_history, dim_price, fact_price
-        run: cd dbt && dbt run --select dim_price_history dim_price fact_price
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.full_refresh }}" = "true" ]; then FLAGS="--full-refresh"; fi
+          cd dbt && dbt run $FLAGS --select dim_price_history dim_price fact_price
 
       - name: dbt test - dwh models
         run: cd dbt && dbt test --select dim_price_history dim_price fact_price
