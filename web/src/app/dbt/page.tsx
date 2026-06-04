@@ -175,6 +175,7 @@ export default function DbtPage() {
               Open dbt Docs ↗
             </a>
           </div>
+        </div>
 
         <p className="text-xs text-stone-300 text-center pb-4">
           8 models · 4 layers (raw → staging → dwh → datamart) · BigQuery europe-west4
