@@ -2,16 +2,8 @@ import fs from "fs";
 import path from "path";
 import Link from "next/link";
 import type { PriceRow } from "@/app/api/prices/route";
-import {
-  pivotForTrend,
-  latestMonthRows,
-  productNames,
-  scorecards,
-} from "@/lib/transforms";
-import Scorecards from "@/components/Scorecards";
-import PriceTrendChart from "@/components/PriceTrendChart";
-import PriceRangeChart from "@/components/PriceRangeChart";
-import PriceTable from "@/components/PriceTable";
+import { scorecards } from "@/lib/transforms";
+import DashboardClient from "@/components/DashboardClient";
 
 export const revalidate = 3600;
 
@@ -55,10 +47,7 @@ function DbtSummaryCard() {
 }
 
 async function fetchPrices(): Promise<PriceRow[]> {
-  // In production (Vercel) the API route runs on the same host.
-  // We call BigQuery directly here so we avoid an HTTP round-trip during SSR.
   const { BigQuery } = await import("@google-cloud/bigquery");
-
   let bq: InstanceType<typeof BigQuery>;
   const credJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (credJson) {
@@ -67,7 +56,6 @@ async function fetchPrices(): Promise<PriceRow[]> {
   } else {
     bq = new BigQuery({ projectId: "soy-sauce-tracker" });
   }
-
   const [rows] = await bq.query(`
     SELECT
       brand,
@@ -81,7 +69,6 @@ async function fetchPrices(): Promise<PriceRow[]> {
     FROM \`soy-sauce-tracker.datamart.datamart_price_comparison\`
     ORDER BY scrape_month ASC, avg_price_eur DESC
   `);
-
   return rows as PriceRow[];
 }
 
@@ -95,10 +82,7 @@ export default async function Home() {
     error = e instanceof Error ? e.message : "Unknown error";
   }
 
-  const stats   = scorecards(rows);
-  const trend   = pivotForTrend(rows);
-  const latest  = latestMonthRows(rows);
-  const products = productNames(rows);
+  const stats = scorecards(rows);
 
   return (
     <main className="min-h-screen bg-stone-50">
@@ -116,24 +100,8 @@ export default async function Home() {
           </div>
         )}
 
-        {/* Scorecards */}
-        <Scorecards
-          avgPrice={stats.avgPrice}
-          cheapest={stats.cheapest}
-          mostExpensive={stats.mostExpensive}
-          products={stats.products}
-          shops={stats.shops}
-          lastUpdated={stats.lastUpdated}
-        />
-
-        {/* Charts row */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <PriceTrendChart data={trend} products={products} />
-          <PriceRangeChart rows={latest} />
-        </div>
-
-        {/* Full table */}
-        <PriceTable rows={rows} />
+        {/* Brand filter + all charts/table (client component) */}
+        <DashboardClient rows={rows} lastUpdated={stats.lastUpdated} />
 
         {/* dbt quality card */}
         <DbtSummaryCard />
