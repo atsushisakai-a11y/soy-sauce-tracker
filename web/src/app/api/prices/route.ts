@@ -37,7 +37,7 @@ export async function GET() {
         ROUND(min_price_eur, 2)              AS min_price_eur,
         ROUND(max_price_eur, 2)              AS max_price_eur,
         ROUND(avg_price_eur, 2)              AS avg_price_eur
-      FROM \`soy-sauce-tracker.staging.datamart_price_comparison\`
+      FROM \`soy-sauce-tracker.datamart.datamart_price_comparison\`
       ORDER BY scrape_month ASC, avg_price_eur DESC
     `);
 
