@@ -40,12 +40,13 @@ WITH cleaned AS (
         )                                           AS price_eur,
         'EUR'                                       AS currency,
         -- Parse size: ml takes priority (e.g. "500ml"), then L (e.g. "1L", "1.5L"), else 500 default
+        -- ml is checked first so the bare [Ll] branch never fires on "500ml" products
         CASE
             WHEN REGEXP_CONTAINS(product_name, r'\d+\s*[Mm][Ll]')
                 THEN SAFE_CAST(REGEXP_EXTRACT(product_name, r'(\d+)\s*[Mm][Ll]') AS INT64)
-            WHEN REGEXP_CONTAINS(product_name, r'\d+(?:\.\d+)?\s*[Ll](?:[^a-zA-Z]|$)')
+            WHEN REGEXP_CONTAINS(product_name, r'\d+(?:\.\d+)?\s*[Ll]')
                 THEN CAST(
-                    CAST(REGEXP_EXTRACT(product_name, r'(\d+(?:\.\d+)?)\s*[Ll](?:[^a-zA-Z]|$)') AS FLOAT64)
+                    CAST(REGEXP_EXTRACT(product_name, r'(\d+(?:\.\d+)?)\s*[Ll]') AS FLOAT64)
                     * 1000 AS INT64
                 )
             ELSE 500
