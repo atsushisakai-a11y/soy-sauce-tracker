@@ -39,10 +39,17 @@ WITH cleaned AS (
             ) AS FLOAT64
         )                                           AS price_eur,
         'EUR'                                       AS currency,
-        COALESCE(
-            SAFE_CAST(REGEXP_EXTRACT(product_name, r'(\d+)\s*[Mm][Ll]') AS INT64),
-            500
-        )                                           AS volume_ml
+        -- Parse size: ml takes priority (e.g. "500ml"), then L (e.g. "1L", "1.5L"), else 500 default
+        CASE
+            WHEN REGEXP_CONTAINS(product_name, r'\d+\s*[Mm][Ll]')
+                THEN SAFE_CAST(REGEXP_EXTRACT(product_name, r'(\d+)\s*[Mm][Ll]') AS INT64)
+            WHEN REGEXP_CONTAINS(product_name, r'\d+(?:\.\d+)?\s*[Ll](?:[^a-zA-Z]|$)')
+                THEN CAST(
+                    CAST(REGEXP_EXTRACT(product_name, r'(\d+(?:\.\d+)?)\s*[Ll](?:[^a-zA-Z]|$)') AS FLOAT64)
+                    * 1000 AS INT64
+                )
+            ELSE 500
+        END                                         AS volume_ml
 
     FROM {{ ref('raw_kikkoman_prices') }}
     WHERE raw_price IS NOT NULL
