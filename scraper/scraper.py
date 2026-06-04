@@ -15,6 +15,7 @@ Soy sauce category pages (for manual reference / future updates):
   Tjin's Toko     : https://www.tjinstoko.eu/nl/zoeken-per-land/japan/sojasaus-japan/
   Albert Heijn    : https://www.ah.nl/producten/6409/soepen-sauzen-kruiden-olie?Soort=4421
   Jumbo           : https://www.jumbo.com/producten/wereldkeukens,-kruiden,-pasta-en-rijst/aziatische-keuken/bijgerechten-en-sauzen/ketjap-en-sojasaus/
+  ACE Market      : https://acemarket.nl/categorie/sauzen/sauzen-dressings/sojasaus/
 """
 
 import csv
@@ -117,6 +118,24 @@ SHOPS = [
         "https://www.tjinstoko.eu/nl/sempio-soy-sauce-rich-mellow-jin-s-500ml.html",
     ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
+    {"shop_name": "ACE Market", "website": "https://acemarket.nl", "direct_product_urls": [
+        "https://acemarket.nl/product/kikkoman-soy-sauce-dispenser-150ml/",
+        "https://acemarket.nl/product/kikkoman-soy-sauce-japanese-500ml/",
+        "https://acemarket.nl/product/kikkoman-soy-sauce-nl-1l/",
+        "https://acemarket.nl/product/kikkoman-less-salt-soy-sauce-large-975ml/",
+        "https://acemarket.nl/product/kikkoman-ponzu-soy-sauce-250ml/",
+        "https://acemarket.nl/product/kikkoman-tamari-gluten-free-soya-sauce-1l/",
+        "https://acemarket.nl/product/pearl-river-bridge-light-soy-sauce-large-500ml/",
+        "https://acemarket.nl/product/lee-kum-kee-premium-dark-soy-sauce-medium-500ml/",
+        "https://acemarket.nl/product/lee-kum-kee-premium-light-soy-sauce-small-150ml/",
+        "https://acemarket.nl/product/mee-chun-soy-sauce-500ml/",
+        "https://acemarket.nl/product/sempio-soy-sauce-jin-s-500ml/",
+        "https://acemarket.nl/product/abc-sweet-soy-sauce-large-600ml/",
+        "https://acemarket.nl/product/abc-sweet-soy-sauce-kecap-manis-275ml/",
+        "https://acemarket.nl/product/dek-som-boon-salt-reduced-soy-sauce-250ml/",
+        "https://acemarket.nl/product/shibanuma-gluten-free-soy-sauce-1l/",
+        "https://acemarket.nl/product/shibanuma-soy-sauce-300ml/",
+    ]},
     # Dutch supermarkets
     {"shop_name": "Albert Heijn", "website": "https://www.ah.nl", "strategy": "ah_api"},
     {"shop_name": "Jumbo",              "website": "https://www.jumbo.com"},
@@ -210,10 +229,19 @@ def _try_direct_urls(shop_name: str, base_url: str, handles: list[str], scrape_r
 # ---------------------------------------------------------------------------
 
 def _extract_price_from_page(shop_name, title, product_url, page_image_url, soup, scrape_run_id, scraped_at) -> Optional[PriceRecord]:
-    """Extract price from a product page using meta itemprop or JSON-LD."""
+    """Extract price from a product page using meta itemprop, JSON-LD, or WooCommerce HTML."""
     meta = soup.find("meta", {"itemprop": "price"})
     if meta and meta.get("content"):
         return _make_record(shop_name, title, f"€{float(meta['content']):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
+
+    # WooCommerce: <span class="woocommerce-Price-amount amount">
+    woo = soup.find("span", class_="woocommerce-Price-amount")
+    if woo:
+        raw = woo.get_text(strip=True).replace("€", "").replace("\xa0", "").replace(",", ".").strip()
+        try:
+            return _make_record(shop_name, title, f"€{float(raw):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
+        except ValueError:
+            pass
 
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
@@ -256,6 +284,14 @@ def _scrape_html_product_pages(shop_name: str, urls: list[str], scrape_run_id: s
         title = h1.get_text(strip=True) if h1 else product_url
         og_image = soup.find("meta", {"property": "og:image"})
         page_image_url = og_image.get("content", "") if og_image else ""
+        # Fallback: first product image hosted on the same domain (skip SVG placeholders)
+        if not page_image_url:
+            domain = product_url.split("/")[2]  # e.g. "acemarket.nl"
+            for img in soup.find_all("img", src=True):
+                src = img.get("src", "")
+                if src and domain in src and any(src.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+                    page_image_url = src
+                    break
         record = _extract_price_from_page(shop_name, title, product_url, page_image_url, soup, scrape_run_id, scraped_at)
         if record:
             records.append(record)
