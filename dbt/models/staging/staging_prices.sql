@@ -67,8 +67,46 @@ SELECT
     )                                               AS global_product_id,
     c.shop_name,
     c.product_name,
-    'Kikkoman'                                      AS brand,
-    'Koikuchi Shoyu'                                AS product_variant,
+    CASE
+        -- Explicit brand name in product name
+        WHEN LOWER(c.product_name) LIKE '%kikkoman%'          THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%yamasa%'            THEN 'Yamasa'
+        WHEN LOWER(c.product_name) LIKE '%lee kum kee%'       THEN 'Lee Kum Kee'
+        WHEN LOWER(c.product_name) LIKE '%sempio%'            THEN 'Sempio'
+        WHEN LOWER(c.product_name) LIKE '%pearl river bridge%' THEN 'Pearl River Bridge'
+        WHEN LOWER(c.product_name) LIKE '%marukin%'           THEN 'Marukin'
+        WHEN LOWER(c.product_name) LIKE '%silver swan%'       THEN 'Silver Swan'
+        WHEN LOWER(c.product_name) LIKE '%healthy boy%'       THEN 'Healthy Boy'
+        WHEN LOWER(c.product_name) LIKE '%mee chun%'          THEN 'Mee Chun'
+        WHEN LOWER(c.product_name) LIKE '%abc%'               THEN 'ABC'
+        WHEN LOWER(c.product_name) LIKE '%kimlan%'            THEN 'Kimlan'
+        WHEN LOWER(c.product_name) LIKE '%wan ja shan%'       THEN 'Wan Ja Shan'
+        WHEN LOWER(c.product_name) LIKE '%dek som boon%'      THEN 'Dek Som Boon'
+        WHEN LOWER(c.product_name) LIKE '%takesan%'           THEN 'Takesan'
+        -- Kikkoman product lines that omit the brand name
+        WHEN LOWER(c.product_name) LIKE '%tokusen%'           THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%gen_en%'            THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%kishibori%'         THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%koikuchi shoyu%'    THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%nama soy%'          THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%teriyaki bbq%'      THEN 'Kikkoman'
+        WHEN LOWER(c.product_name) LIKE '%gluten free tamari%' THEN 'Kikkoman'
+        ELSE 'Other'
+    END                                             AS brand,
+    CASE
+        WHEN LOWER(c.product_name) LIKE '%less salt%'
+          OR LOWER(c.product_name) LIKE '%gen_en%'
+          OR LOWER(c.product_name) LIKE '%reduced salt%'      THEN 'Reduced Salt'
+        WHEN LOWER(c.product_name) LIKE '%tamari%'            THEN 'Tamari'
+        WHEN LOWER(c.product_name) LIKE '%ponzu%'             THEN 'Ponzu'
+        WHEN LOWER(c.product_name) LIKE '%teriyaki%'          THEN 'Teriyaki'
+        WHEN LOWER(c.product_name) LIKE '%usukuchi%'
+          OR LOWER(c.product_name) LIKE '%light soy%'         THEN 'Light Soy Sauce'
+        WHEN LOWER(c.product_name) LIKE '%dark soy%'          THEN 'Dark Soy Sauce'
+        WHEN LOWER(c.product_name) LIKE '%sweet%'
+          OR LOWER(c.product_name) LIKE '%kecap manis%'       THEN 'Sweet Soy Sauce'
+        ELSE 'Koikuchi Shoyu'
+    END                                             AS product_variant,
     c.volume_ml,
     c.price_eur,
     ROUND(c.price_eur / c.volume_ml * 100, 4)      AS price_per_100ml_eur,
