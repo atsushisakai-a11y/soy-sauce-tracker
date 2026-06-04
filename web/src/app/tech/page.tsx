@@ -33,8 +33,9 @@ const stack: StackCard[] = [
     name: "dbt (data build tool)",
     role: "Data transformation",
     description:
-      "Four-layer dbt project (raw → staging → dwh → datamart) running on BigQuery. Staging normalises prices to EUR and joins product groups. DWH implements SCD Type 2 for price history. Datamart aggregates monthly min/avg/max prices per global_product_id for the dashboard.",
-    badges: ["dbt-bigquery", "SCD Type 2", "dbt_utils", "Views + Tables"],
+      "Four-layer dbt project (raw → staging → dwh → datamart) running on BigQuery. Staging normalises prices to EUR and joins product groups. DWH implements SCD Type 2 for price history. Datamart aggregates monthly min/avg/max prices per global_product_id for the dashboard. The full model lineage DAG, column documentation, and 42 test results are published publicly via GitHub Pages — auto-updated by GitHub Actions on every pipeline run.",
+    badges: ["dbt-bigquery", "SCD Type 2", "dbt_utils", "Views + Tables", "42 tests passing"],
+    link: "https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview",
   },
   {
     icon: "🏗️",
@@ -112,6 +113,60 @@ export default function TechPage() {
             >
               📊 See the Dashboard
             </Link>
+          </div>
+        </section>
+
+        {/* Live links */}
+        <section>
+          <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest mb-4 text-center">
+            Live Public Links
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              {
+                icon: "📊",
+                label: "Price Dashboard",
+                description: "Live price trends and comparisons across European shops",
+                href: "/",
+                internal: true,
+                color: "border-amber-200 bg-amber-50 hover:bg-amber-100",
+                labelColor: "text-amber-700",
+              },
+              {
+                icon: "🔀",
+                label: "dbt Lineage DAG",
+                description: "Full model lineage, column docs & 42 test results — auto-published via GitHub Pages on every pipeline run",
+                href: "https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview",
+                internal: false,
+                color: "border-orange-200 bg-orange-50 hover:bg-orange-100",
+                labelColor: "text-orange-700",
+              },
+              {
+                icon: "💻",
+                label: "GitHub Repository",
+                description: "Full source code — scraper, DINOv2 similarity, dbt models, and this Next.js dashboard",
+                href: "https://github.com/atsushisakai-a11y/soy-sauce-tracker",
+                internal: false,
+                color: "border-stone-200 bg-stone-50 hover:bg-stone-100",
+                labelColor: "text-stone-700",
+              },
+            ].map((l) =>
+              l.internal ? (
+                <Link key={l.label} href={l.href}
+                  className={`border rounded-2xl p-5 flex flex-col gap-2 transition-colors ${l.color}`}>
+                  <span className="text-2xl">{l.icon}</span>
+                  <span className={`font-semibold text-sm ${l.labelColor}`}>{l.label}</span>
+                  <p className="text-xs text-stone-500 leading-relaxed">{l.description}</p>
+                </Link>
+              ) : (
+                <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer"
+                  className={`border rounded-2xl p-5 flex flex-col gap-2 transition-colors ${l.color}`}>
+                  <span className="text-2xl">{l.icon}</span>
+                  <span className={`font-semibold text-sm ${l.labelColor}`}>{l.label} ↗</span>
+                  <p className="text-xs text-stone-500 leading-relaxed">{l.description}</p>
+                </a>
+              )
+            )}
           </div>
         </section>
 
