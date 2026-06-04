@@ -7,9 +7,10 @@ export default function Nav() {
   const path = usePathname();
 
   const tabs = [
-    { href: "/",      label: "Dashboard" },
-    { href: "/dbt",   label: "dbt Quality" },
-    { href: "/tech",  label: "Tech Stack" },
+    { href: "/",       label: "Dashboard" },
+    { href: "/dbt",    label: "dbt Quality" },
+    { href: "/tech",   label: "Tech Stack" },
+    { href: "/about",  label: "About" },
   ];
 
   return (

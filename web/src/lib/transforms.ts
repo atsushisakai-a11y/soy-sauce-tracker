@@ -19,15 +19,15 @@ export function shortName(name: string): string {
 
 /** All distinct product names sorted by latest avg price desc */
 export function productNames(rows: PriceRow[]): string[] {
-  const latest = new Map<string, number>();
+  const latest = new Map<string, { month: string; price: number }>();
   for (const r of rows) {
-    const prev = latest.get(r.product_name) ?? "";
-    if (!prev || r.scrape_month > prev) {
-      latest.set(r.product_name, r.avg_price_eur);
+    const prev = latest.get(r.product_name);
+    if (!prev || r.scrape_month > prev.month) {
+      latest.set(r.product_name, { month: r.scrape_month, price: r.avg_price_eur });
     }
   }
-  return [...latest.keys()].sort(
-    (a, b) => (latest.get(b) ?? 0) - (latest.get(a) ?? 0)
+  return Array.from(latest.keys()).sort(
+    (a, b) => (latest.get(b)?.price ?? 0) - (latest.get(a)?.price ?? 0)
   );
 }
 

@@ -66,12 +66,12 @@ function FilterBar<T extends string | number>({
 
 export default function DashboardClient({ rows, lastUpdated }: Props) {
   const allBrands = useMemo(
-    () => [...new Set(rows.map((r) => r.brand))].sort(),
+    () => Array.from(new Set(rows.map((r) => r.brand))).sort(),
     [rows]
   );
 
   const allSizes = useMemo(
-    () => [...new Set(rows.map((r) => r.volume_ml))].sort((a, b) => a - b),
+    () => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b),
     [rows]
   );
 
