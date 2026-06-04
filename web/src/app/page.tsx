@@ -60,25 +60,12 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-stone-50">
-      {/* Header */}
-      <header className="bg-white border-b border-stone-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🫙</span>
-            <div>
-              <h1 className="text-xl font-bold text-stone-900 leading-tight">
-                European Soy Sauce Price Tracker
-              </h1>
-              <p className="text-xs text-stone-400">
-                Real prices scraped from European online shops · updated monthly
-              </p>
-            </div>
-          </div>
-          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 font-medium">
-            Last scrape: {stats.lastUpdated}
-          </span>
-        </div>
-      </header>
+      {/* Last scrape badge */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 flex justify-end">
+        <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 font-medium">
+          Last scrape: {stats.lastUpdated}
+        </span>
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {error && (

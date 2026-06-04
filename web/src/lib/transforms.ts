@@ -1,12 +1,20 @@
 import type { PriceRow } from "@/app/api/prices/route";
 
-/** Short display label — strip brand prefix, keep size */
+/** Short display label — strip repeated brand words, keep size */
 export function shortName(name: string): string {
-  return name
-    .replace(/^kikkoman\s*/i, "")
-    .replace(/naturally brewed\s*/i, "")
-    .trim()
-    .replace(/\b(\d+)\s*ml\b/i, "$1ml");
+  // Remove HTML entities
+  let s = name.replace(/&amp;/g, "&");
+  // Remove duplicate leading word (e.g. "Yamasa Yamasa …" → "Yamasa …")
+  s = s.replace(/^(\S+)\s+\1\s+/i, "$1 ");
+  // Remove duplicate multi-word brand (e.g. "Lee Kum Kee Lee Kum Kee …")
+  s = s.replace(/^(.{4,25}?)\s+\1\s+/i, "$1 ");
+  // Strip generic filler words
+  s = s.replace(/\bNaturally Brewed\b/gi, "").trim();
+  // Normalise whitespace
+  s = s.replace(/\s{2,}/g, " ").trim();
+  // Keep max 40 chars
+  if (s.length > 40) s = s.slice(0, 38) + "…";
+  return s;
 }
 
 /** All distinct product names sorted by latest avg price desc */
