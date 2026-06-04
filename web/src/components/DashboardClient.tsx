@@ -2,40 +2,91 @@
 
 import { useState, useMemo } from "react";
 import type { PriceRow } from "@/app/api/prices/route";
-import { pivotForTrend, latestMonthRows, productNames } from "@/lib/transforms";
+import { pivotForTrend, latestMonthRows, productNames, scorecards, formatSize } from "@/lib/transforms";
 import Scorecards from "@/components/Scorecards";
 import PriceTrendChart from "@/components/PriceTrendChart";
 import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
-import { scorecards } from "@/lib/transforms";
 
 type Props = {
   rows: PriceRow[];
   lastUpdated: string;
 };
 
+function FilterBar<T extends string | number>({
+  label,
+  items,
+  selected,
+  onToggle,
+  onAll,
+  onNone,
+  format,
+}: {
+  label: string;
+  items: T[];
+  selected: Set<T>;
+  onToggle: (v: T) => void;
+  onAll: () => void;
+  onNone: () => void;
+  format: (v: T) => string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">
+          {label}
+        </span>
+        <div className="flex gap-2">
+          <button onClick={onAll}  className="text-xs text-amber-600 hover:text-amber-800 font-medium">All</button>
+          <span className="text-stone-200">|</span>
+          <button onClick={onNone} className="text-xs text-stone-400 hover:text-stone-600 font-medium">None</button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {items.map((v) => {
+          const active = selected.has(v);
+          return (
+            <button
+              key={String(v)}
+              onClick={() => onToggle(v)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                active
+                  ? "bg-amber-500 text-white border-amber-500"
+                  : "bg-white text-stone-400 border-stone-200 hover:border-amber-300 hover:text-amber-600"
+              }`}
+            >
+              {format(v)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardClient({ rows, lastUpdated }: Props) {
-  // Collect unique brands sorted alphabetically
   const allBrands = useMemo(
     () => [...new Set(rows.map((r) => r.brand))].sort(),
     [rows]
   );
 
-  const [selected, setSelected] = useState<Set<string>>(new Set(allBrands));
+  const allSizes = useMemo(
+    () => [...new Set(rows.map((r) => r.volume_ml))].sort((a, b) => a - b),
+    [rows]
+  );
 
-  const toggle = (brand: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(brand) ? next.delete(brand) : next.add(brand);
-      return next;
-    });
+  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set(allBrands));
+  const [selectedSizes,  setSelectedSizes]  = useState<Set<number>>(new Set(allSizes));
 
-  const selectAll = () => setSelected(new Set(allBrands));
-  const clearAll  = () => setSelected(new Set());
+  const toggle = <T,>(set: Set<T>, val: T, setter: (s: Set<T>) => void) => {
+    const next = new Set(set);
+    next.has(val) ? next.delete(val) : next.add(val);
+    setter(next);
+  };
 
   const filtered = useMemo(
-    () => rows.filter((r) => selected.has(r.brand)),
-    [rows, selected]
+    () => rows.filter((r) => selectedBrands.has(r.brand) && selectedSizes.has(r.volume_ml)),
+    [rows, selectedBrands, selectedSizes]
   );
 
   const stats    = scorecards(filtered);
@@ -45,49 +96,31 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
 
   return (
     <div className="space-y-8">
-      {/* Brand filter bar */}
-      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">
-            Filter by Brand
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={selectAll}
-              className="text-xs text-amber-600 hover:text-amber-800 font-medium"
-            >
-              All
-            </button>
-            <span className="text-stone-200">|</span>
-            <button
-              onClick={clearAll}
-              className="text-xs text-stone-400 hover:text-stone-600 font-medium"
-            >
-              None
-            </button>
-          </div>
+      {/* Filter bar */}
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-4">
+        <FilterBar
+          label="Brand"
+          items={allBrands}
+          selected={selectedBrands}
+          onToggle={(v) => toggle(selectedBrands, v, setSelectedBrands)}
+          onAll={() => setSelectedBrands(new Set(allBrands))}
+          onNone={() => setSelectedBrands(new Set())}
+          format={(v) => v}
+        />
+        <div className="border-t border-stone-50 pt-4">
+          <FilterBar
+            label="Size"
+            items={allSizes}
+            selected={selectedSizes}
+            onToggle={(v) => toggle(selectedSizes, v, setSelectedSizes)}
+            onAll={() => setSelectedSizes(new Set(allSizes))}
+            onNone={() => setSelectedSizes(new Set())}
+            format={formatSize}
+          />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {allBrands.map((brand) => {
-            const active = selected.has(brand);
-            return (
-              <button
-                key={brand}
-                onClick={() => toggle(brand)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  active
-                    ? "bg-amber-500 text-white border-amber-500"
-                    : "bg-white text-stone-400 border-stone-200 hover:border-amber-300 hover:text-amber-600"
-                }`}
-              >
-                {brand}
-              </button>
-            );
-          })}
-        </div>
-        {selected.size === 0 && (
-          <p className="text-xs text-stone-400 mt-2">
-            No brands selected — select at least one to see data.
+        {(selectedBrands.size === 0 || selectedSizes.size === 0) && (
+          <p className="text-xs text-stone-400 pt-1">
+            Select at least one brand and one size to see data.
           </p>
         )}
       </div>
@@ -102,7 +135,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
         lastUpdated={lastUpdated}
       />
 
-      {/* Charts */}
+      {/* Charts + Table */}
       {filtered.length > 0 ? (
         <>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -113,7 +146,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
         </>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-12 text-center text-stone-400 text-sm">
-          Select a brand above to see data.
+          No data matches the selected filters.
         </div>
       )}
     </div>

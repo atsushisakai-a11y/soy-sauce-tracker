@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PriceRow } from "@/app/api/prices/route";
+import { formatSize } from "@/lib/transforms";
 
 type Props = { rows: PriceRow[] };
 
@@ -86,7 +87,9 @@ export default function PriceTable({ rows }: Props) {
           <thead>
             <tr className="border-b border-stone-100">
               <Th col="scrape_month" label="Month" />
+              <Th col="brand" label="Brand" />
               <Th col="product_name" label="Product" />
+              <Th col="volume_ml" label="Size" right />
               <Th col="shop_count" label="Shops" right />
               <Th col="min_price_eur" label="Min" right />
               <Th col="avg_price_eur" label="Avg" right />
@@ -102,9 +105,11 @@ export default function PriceTable({ rows }: Props) {
                 <td className="px-3 py-2 font-mono text-xs text-stone-500">
                   {r.scrape_month}
                 </td>
-                <td className="px-3 py-2 text-stone-800 max-w-[240px] truncate" title={r.product_name}>
+                <td className="px-3 py-2 text-xs text-stone-500">{r.brand}</td>
+                <td className="px-3 py-2 text-stone-800 max-w-[200px] truncate" title={r.product_name}>
                   {r.product_name}
                 </td>
+                <td className="px-3 py-2 text-right text-stone-500 text-xs">{formatSize(r.volume_ml)}</td>
                 <td className="px-3 py-2 text-right text-stone-600">{r.shop_count}</td>
                 <td className="px-3 py-2 text-right text-stone-600">{fmt(r.min_price_eur)}</td>
                 <td className={`px-3 py-2 text-right font-semibold rounded ${heatColor(r.avg_price_eur, minAvg, maxAvg)}`}>

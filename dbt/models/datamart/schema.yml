@@ -19,6 +19,9 @@ models:
       - name: product_name
         description: "Representative product name — MAX() across all shops sharing this global_product_id."
         tests: [not_null]
+      - name: volume_ml
+        description: "Product size in millilitres (e.g. 150, 500, 1000)."
+        tests: [not_null]
       - name: shop_count
         tests: [not_null]
       - name: min_price_eur

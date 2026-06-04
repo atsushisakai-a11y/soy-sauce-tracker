@@ -8,6 +8,7 @@ export type PriceRow = {
   global_product_id: string;
   scrape_month: string;      // "YYYY-MM"
   product_name: string;
+  volume_ml: number;
   shop_count: number;
   min_price_eur: number;
   max_price_eur: number;
@@ -33,7 +34,8 @@ export async function GET() {
         global_product_id,
         FORMAT_DATE('%Y-%m', scrape_month)   AS scrape_month,
         product_name,
-        CAST(shop_count      AS INT64)       AS shop_count,
+        CAST(volume_ml       AS INT64)        AS volume_ml,
+      CAST(shop_count      AS INT64)       AS shop_count,
         ROUND(min_price_eur, 2)              AS min_price_eur,
         ROUND(max_price_eur, 2)              AS max_price_eur,
         ROUND(avg_price_eur, 2)              AS avg_price_eur

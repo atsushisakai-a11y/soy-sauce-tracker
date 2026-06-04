@@ -71,6 +71,13 @@ export function scorecards(rows: PriceRow[]) {
   };
 }
 
+/** Format ml → display label: 150 → "150ml", 1000 → "1L", 1800 → "1.8L" */
+export function formatSize(ml: number): string {
+  if (ml >= 1000 && ml % 1000 === 0) return `${ml / 1000}L`;
+  if (ml >= 1000) return `${(ml / 1000).toFixed(1)}L`;
+  return `${ml}ml`;
+}
+
 /** Chart colour palette — soy-sauce-inspired ambers + earthy tones */
 export const CHART_COLORS = [
   "#d97706", // amber-500
