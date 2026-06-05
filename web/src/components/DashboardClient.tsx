@@ -7,6 +7,7 @@ import Scorecards from "@/components/Scorecards";
 import PriceTrendChart from "@/components/PriceTrendChart";
 import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
+import PriceScatterChart from "@/components/PriceScatterChart";
 
 type Props = {
   rows: PriceRow[];
@@ -142,6 +143,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceTrendChart data={trend} products={products} />
             <PriceRangeChart rows={latest} />
           </div>
+          <PriceScatterChart rows={filtered} />
           <PriceTable rows={filtered} />
         </>
       ) : (
