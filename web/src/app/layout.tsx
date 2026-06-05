@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import Nav from "@/components/Nav";
 import "./globals.css";
 
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-stone-50 text-stone-900 antialiased">
         <Nav />
         {children}
+        <Analytics />
       </body>
     </html>
   );
