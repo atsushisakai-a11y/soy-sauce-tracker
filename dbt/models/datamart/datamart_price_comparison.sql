@@ -5,8 +5,8 @@ WITH per_shop AS (
     SELECT
         d.global_product_id,
         d.shop_name,
-        d.product_url,
         DATE_TRUNC(f.scrape_date, MONTH)    AS scrape_month,
+        MAX(d.product_url)                  AS product_url,
         MAX(d.brand)                        AS brand,
         MAX(d.product_name)                 AS product_name,
         MAX(d.volume_ml)                    AS volume_ml,
@@ -17,7 +17,7 @@ WITH per_shop AS (
     FROM {{ ref('fact_price') }}  f
     JOIN {{ ref('dim_price') }}   d  ON f.product_id = d.product_id
 
-    GROUP BY 1, 2, 3, 4
+    GROUP BY 1, 2, 3
 
 )
 
