@@ -14,6 +14,57 @@ type Props = {
   lastUpdated: string;
 };
 
+function ShopList({ rows }: { rows: PriceRow[] }) {
+  // Derive one entry per shop: name + base URL from the first product_url found
+  const shops = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (!map.has(r.shop_name) && r.product_url) {
+        try {
+          const { origin } = new URL(r.product_url);
+          map.set(r.shop_name, origin);
+        } catch {
+          map.set(r.shop_name, "");
+        }
+      } else if (!map.has(r.shop_name)) {
+        map.set(r.shop_name, "");
+      }
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [rows]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
+      <h2 className="text-base font-semibold text-stone-800 mb-1">Shops</h2>
+      <p className="text-xs text-stone-400 mb-4">
+        {shops.length} shops tracked · click to visit
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {shops.map(([name, url]) =>
+          url ? (
+            <a
+              key={name}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-200 text-stone-600 hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+            >
+              {name}
+              <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          ) : (
+            <span key={name} className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border border-stone-200 text-stone-400">
+              {name}
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FilterBar<T extends string | number>({
   label,
   items,
@@ -168,6 +219,10 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
+
+          {/* Shop list */}
+          <ShopList rows={filtered} />
+
           <PriceTable rows={filtered} />
         </>
       ) : (
