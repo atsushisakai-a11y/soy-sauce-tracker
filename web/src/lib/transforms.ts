@@ -78,16 +78,18 @@ export function formatSize(ml: number): string {
   return `${ml}ml`;
 }
 
-/** Chart colour palette — soy-sauce-inspired ambers + earthy tones */
+/** Chart colour palette — maximally distinguishable across hues */
 export const CHART_COLORS = [
-  "#d97706", // amber-500
-  "#b45309", // amber-700
-  "#ea580c", // orange-600
-  "#92400e", // amber-800
-  "#f59e0b", // amber-400
+  "#2563eb", // blue-600
   "#dc2626", // red-600
-  "#65a30d", // lime-600
-  "#0891b2", // cyan-600
+  "#16a34a", // green-600
+  "#d97706", // amber-500
   "#7c3aed", // violet-600
+  "#0891b2", // cyan-600
   "#db2777", // pink-600
+  "#65a30d", // lime-600
+  "#ea580c", // orange-600
+  "#0f766e", // teal-700
+  "#9333ea", // purple-600
+  "#ca8a04", // yellow-600
 ];
