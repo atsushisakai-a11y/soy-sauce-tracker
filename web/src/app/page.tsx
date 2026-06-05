@@ -134,8 +134,6 @@ export default async function Home() {
             </div>
           </div>
         </div>
-        {/* Bottom fade */}
-        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-stone-50 to-transparent" />
       </div>
 
 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
