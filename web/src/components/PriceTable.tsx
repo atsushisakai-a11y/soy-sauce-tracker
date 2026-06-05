@@ -89,6 +89,7 @@ export default function PriceTable({ rows }: Props) {
               <Th col="scrape_month" label="Month" />
               <Th col="brand" label="Brand" />
               <Th col="product_name" label="Product" />
+              <Th col="shop_name" label="Shop" />
               <Th col="volume_ml" label="Size" right />
               <Th col="shop_count" label="Shops" right />
               <Th col="min_price_eur" label="Min" right />
@@ -99,7 +100,7 @@ export default function PriceTable({ rows }: Props) {
           <tbody>
             {filtered.map((r, i) => (
               <tr
-                key={`${r.global_product_id}-${r.scrape_month}`}
+                key={`${r.global_product_id}-${r.shop_name}-${r.scrape_month}`}
                 className={`border-b border-stone-50 hover:bg-stone-50 transition-colors ${i % 2 === 0 ? "" : "bg-stone-50/40"}`}
               >
                 <td className="px-3 py-2 font-mono text-xs text-stone-500">
@@ -107,8 +108,14 @@ export default function PriceTable({ rows }: Props) {
                 </td>
                 <td className="px-3 py-2 text-xs text-stone-500">{r.brand}</td>
                 <td className="px-3 py-2 text-stone-800 max-w-[200px] truncate" title={r.product_name}>
-                  {r.product_name}
+                  {r.product_url ? (
+                    <a href={r.product_url} target="_blank" rel="noopener noreferrer"
+                      className="hover:text-amber-600 hover:underline">
+                      {r.product_name}
+                    </a>
+                  ) : r.product_name}
                 </td>
+                <td className="px-3 py-2 text-xs text-stone-500 whitespace-nowrap">{r.shop_name}</td>
                 <td className="px-3 py-2 text-right text-stone-500 text-xs">{formatSize(r.volume_ml)}</td>
                 <td className="px-3 py-2 text-right text-stone-600">{r.shop_count}</td>
                 <td className="px-3 py-2 text-right text-stone-600">{fmt(r.min_price_eur)}</td>
@@ -120,7 +127,7 @@ export default function PriceTable({ rows }: Props) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-stone-400 text-sm">
+                <td colSpan={9} className="px-3 py-8 text-center text-stone-400 text-sm">
                   No results for "{search}"
                 </td>
               </tr>

@@ -58,9 +58,11 @@ async function fetchPrices(): Promise<PriceRow[]> {
   }
   const [rows] = await bq.query(`
     SELECT
-      brand,
       global_product_id,
+      shop_name,
+      COALESCE(product_url, '')            AS product_url,
       FORMAT_DATE('%Y-%m', scrape_month)   AS scrape_month,
+      brand,
       product_name,
       CAST(volume_ml  AS INT64)            AS volume_ml,
       CAST(shop_count AS INT64)            AS shop_count,

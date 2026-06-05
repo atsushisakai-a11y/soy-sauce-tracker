@@ -1,17 +1,39 @@
 {{ config(materialized='view') }}
 
+WITH per_shop AS (
+
+    SELECT
+        d.global_product_id,
+        d.shop_name,
+        d.product_url,
+        DATE_TRUNC(f.scrape_date, MONTH)    AS scrape_month,
+        MAX(d.brand)                        AS brand,
+        MAX(d.product_name)                 AS product_name,
+        MAX(d.volume_ml)                    AS volume_ml,
+        ROUND(MIN(f.price_eur), 2)          AS min_price_eur,
+        ROUND(MAX(f.price_eur), 2)          AS max_price_eur,
+        ROUND(AVG(f.price_eur), 2)          AS avg_price_eur
+
+    FROM {{ ref('fact_price') }}  f
+    JOIN {{ ref('dim_price') }}   d  ON f.product_id = d.product_id
+
+    GROUP BY 1, 2, 3, 4
+
+)
+
 SELECT
-    d.global_product_id,
-    DATE_TRUNC(f.scrape_date, MONTH)        AS scrape_month,
-    MAX(d.brand)                            AS brand,
-    MAX(d.product_name)                     AS product_name,
-    MAX(d.volume_ml)                        AS volume_ml,
-    COUNT(DISTINCT d.shop_name)             AS shop_count,
-    MIN(f.price_eur)                        AS min_price_eur,
-    MAX(f.price_eur)                        AS max_price_eur,
-    AVG(f.price_eur)                        AS avg_price_eur
+    p.global_product_id,
+    p.shop_name,
+    p.product_url,
+    p.scrape_month,
+    p.brand,
+    p.product_name,
+    p.volume_ml,
+    COUNT(*) OVER (
+        PARTITION BY p.global_product_id, p.scrape_month
+    )                                       AS shop_count,
+    p.min_price_eur,
+    p.max_price_eur,
+    p.avg_price_eur
 
-FROM {{ ref('fact_price') }}  f
-JOIN {{ ref('dim_price') }}   d  ON f.product_id = d.product_id
-
-GROUP BY 1, 2
+FROM per_shop p

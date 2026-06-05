@@ -6,23 +6,29 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            combination_of_columns: [global_product_id, scrape_month]
+            combination_of_columns: [global_product_id, shop_name, scrape_month]
     columns:
       - name: global_product_id
         description: "UUID shared by products matched across shops via image similarity."
         tests: [not_null]
+      - name: shop_name
+        description: "Name of the shop selling this product."
+        tests: [not_null]
+      - name: product_url
+        description: "Direct URL to the product page at this shop."
       - name: scrape_month
         description: "First day of the month — prices aggregated to year/month granularity."
         tests: [not_null]
       - name: brand
         tests: [not_null]
       - name: product_name
-        description: "Representative product name — MAX() across all shops sharing this global_product_id."
+        description: "Representative product name."
         tests: [not_null]
       - name: volume_ml
         description: "Product size in millilitres (e.g. 150, 500, 1000)."
         tests: [not_null]
       - name: shop_count
+        description: "Total number of shops selling this product that month."
         tests: [not_null]
       - name: min_price_eur
         tests: [not_null]

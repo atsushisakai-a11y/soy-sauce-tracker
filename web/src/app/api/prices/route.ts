@@ -4,9 +4,11 @@ import { NextResponse } from "next/server";
 export const revalidate = 3600; // cache 1 hour
 
 export type PriceRow = {
-  brand: string;
   global_product_id: string;
+  shop_name: string;
+  product_url: string;
   scrape_month: string;      // "YYYY-MM"
+  brand: string;
   product_name: string;
   volume_ml: number;
   shop_count: number;
@@ -30,12 +32,14 @@ export async function GET() {
     const bq = getClient();
     const [rows] = await bq.query(`
       SELECT
-        brand,
         global_product_id,
+        shop_name,
+        COALESCE(product_url, '')            AS product_url,
         FORMAT_DATE('%Y-%m', scrape_month)   AS scrape_month,
+        brand,
         product_name,
-        CAST(volume_ml       AS INT64)        AS volume_ml,
-      CAST(shop_count      AS INT64)       AS shop_count,
+        CAST(volume_ml    AS INT64)          AS volume_ml,
+        CAST(shop_count   AS INT64)          AS shop_count,
         ROUND(min_price_eur, 2)              AS min_price_eur,
         ROUND(max_price_eur, 2)              AS max_price_eur,
         ROUND(avg_price_eur, 2)              AS avg_price_eur
