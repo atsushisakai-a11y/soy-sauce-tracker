@@ -95,9 +95,6 @@ export default async function Home() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7 sm:py-10 flex flex-col sm:flex-row items-center gap-8">
           {/* Bottle + title */}
           <div className="flex items-center gap-5 flex-shrink-0">
-            <div className="drop-shadow-2xl">
-              <img src="/shoyu-bottle.png" alt="Soy sauce bottle" className="h-28 sm:h-36 w-auto" />
-            </div>
             <div>
               <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide uppercase">
                 🌍 Europe · {stats.lastUpdated} data
