@@ -4,6 +4,7 @@ import Image from "next/image";
 
 type BrandMeta = {
   domain: string;
+  website: string;
   flag: string;
   tag: string;
   tagColor: string;
@@ -13,6 +14,7 @@ type BrandMeta = {
 const BRAND_META: Record<string, BrandMeta> = {
   Kikkoman: {
     domain: "kikkoman.com",
+    website: "https://www.kikkoman.eu/",
     flag: "🇯🇵",
     tag: "Premium Japanese",
     tagColor: "bg-red-50 text-red-700 border-red-200",
@@ -20,6 +22,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   Yamasa: {
     domain: "yamasa.com",
+    website: "https://www.yamasa.com/",
     flag: "🇯🇵",
     tag: "Traditional Japanese",
     tagColor: "bg-red-50 text-red-700 border-red-200",
@@ -27,6 +30,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   Takesan: {
     domain: "takesan.co.jp",
+    website: "https://www.takesan.co.jp/",
     flag: "🇯🇵",
     tag: "Artisan Japanese",
     tagColor: "bg-red-50 text-red-700 border-red-200",
@@ -34,6 +38,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   Marukin: {
     domain: "marukin.co.jp",
+    website: "https://www.marukin.co.jp/",
     flag: "🇯🇵",
     tag: "Japanese Specialty",
     tagColor: "bg-red-50 text-red-700 border-red-200",
@@ -41,6 +46,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Lee Kum Kee": {
     domain: "lkk.com",
+    website: "https://nl.lkk.com/",
     flag: "🇭🇰",
     tag: "Hong Kong Classic",
     tagColor: "bg-purple-50 text-purple-700 border-purple-200",
@@ -48,6 +54,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Mee Chun": {
     domain: "meechun.com",
+    website: "https://www.meechun.com/",
     flag: "🇭🇰",
     tag: "Hong Kong Value",
     tagColor: "bg-purple-50 text-purple-700 border-purple-200",
@@ -55,6 +62,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Pearl River Bridge": {
     domain: "prb.com.cn",
+    website: "https://www.prb.com.cn/",
     flag: "🇨🇳",
     tag: "Affordable Chinese",
     tagColor: "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -62,6 +70,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   Sempio: {
     domain: "sempio.com",
+    website: "https://www.sempio.com/",
     flag: "🇰🇷",
     tag: "Korean",
     tagColor: "bg-blue-50 text-blue-700 border-blue-200",
@@ -69,6 +78,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Silver Swan": {
     domain: "silvanswan.com.ph",
+    website: "https://www.nutrisco.com/brands/silver-swan/",
     flag: "🇵🇭",
     tag: "Filipino",
     tagColor: "bg-sky-50 text-sky-700 border-sky-200",
@@ -76,6 +86,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Healthy Boy": {
     domain: "healthyboy.co.th",
+    website: "https://www.healthyboy.co.th/",
     flag: "🇹🇭",
     tag: "Thai",
     tagColor: "bg-green-50 text-green-700 border-green-200",
@@ -83,6 +94,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Dek Som Boon": {
     domain: "deksom.com",
+    website: "https://www.deksom.com/",
     flag: "🇹🇭",
     tag: "Thai Specialty",
     tagColor: "bg-green-50 text-green-700 border-green-200",
@@ -90,6 +102,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   ABC: {
     domain: "abcsambal.com",
+    website: "https://www.abcsambal.com/",
     flag: "🇮🇩",
     tag: "Indonesian",
     tagColor: "bg-orange-50 text-orange-700 border-orange-200",
@@ -97,6 +110,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   Kimlan: {
     domain: "kimlan.com",
+    website: "https://www.kimlan.com/",
     flag: "🇹🇼",
     tag: "Taiwanese",
     tagColor: "bg-teal-50 text-teal-700 border-teal-200",
@@ -104,6 +118,7 @@ const BRAND_META: Record<string, BrandMeta> = {
   },
   "Wan Ja Shan": {
     domain: "wanjashan.com",
+    website: "https://www.wanjashan.com/",
     flag: "🇹🇼",
     tag: "Organic Taiwanese",
     tagColor: "bg-teal-50 text-teal-700 border-teal-200",
@@ -121,7 +136,6 @@ function LogoBadge({ domain, name }: { domain: string; name: string }) {
         height={40}
         className="object-contain"
         onError={(e) => {
-          // Fallback to initials
           (e.target as HTMLImageElement).style.display = "none";
           const parent = (e.target as HTMLImageElement).parentElement;
           if (parent) {
@@ -146,23 +160,32 @@ export default function BrandDirectory({ activeBrands }: Props) {
     <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
       <h2 className="text-base font-semibold text-stone-800 mb-1">Brands</h2>
       <p className="text-xs text-stone-400 mb-5">
-        {entries.length} brands · origin and style guide
+        {entries.length} brands · origin and style guide · click to visit
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {entries.map(([name, meta]) => (
-          <div key={name} className="flex gap-3 p-3 rounded-xl border border-stone-100 hover:border-stone-200 transition-colors">
+          <a
+            key={name}
+            href={meta.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex gap-3 p-3 rounded-xl border border-stone-100 hover:border-amber-300 hover:bg-amber-50/40 transition-colors group"
+          >
             <LogoBadge domain={meta.domain} name={name} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                <span className="text-sm font-semibold text-stone-800">{name}</span>
+                <span className="text-sm font-semibold text-stone-800 group-hover:text-amber-700 transition-colors">{name}</span>
                 <span className="text-base leading-none">{meta.flag}</span>
+                <svg className="w-3 h-3 text-stone-300 group-hover:text-amber-400 ml-auto flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
               </div>
               <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border mb-1.5 ${meta.tagColor}`}>
                 {meta.tag}
               </span>
               <p className="text-xs text-stone-400 leading-relaxed">{meta.desc}</p>
             </div>
-          </div>
+          </a>
         ))}
       </div>
     </div>
