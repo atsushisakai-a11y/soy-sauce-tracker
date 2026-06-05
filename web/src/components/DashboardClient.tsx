@@ -76,8 +76,14 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
     [rows]
   );
 
+  const allShops = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.shop_name))).sort(),
+    [rows]
+  );
+
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set(allBrands));
   const [selectedSizes,  setSelectedSizes]  = useState<Set<number>>(new Set(allSizes));
+  const [selectedShops,  setSelectedShops]  = useState<Set<string>>(new Set(allShops));
 
   const toggle = <T,>(set: Set<T>, val: T, setter: (s: Set<T>) => void) => {
     const next = new Set(set);
@@ -86,8 +92,12 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
   };
 
   const filtered = useMemo(
-    () => rows.filter((r) => selectedBrands.has(r.brand) && selectedSizes.has(r.volume_ml)),
-    [rows, selectedBrands, selectedSizes]
+    () => rows.filter((r) =>
+      selectedBrands.has(r.brand) &&
+      selectedSizes.has(r.volume_ml) &&
+      selectedShops.has(r.shop_name)
+    ),
+    [rows, selectedBrands, selectedSizes, selectedShops]
   );
 
   const stats    = scorecards(filtered);
@@ -119,9 +129,20 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             format={formatSize}
           />
         </div>
-        {(selectedBrands.size === 0 || selectedSizes.size === 0) && (
+        <div className="border-t border-stone-50 pt-4">
+          <FilterBar
+            label="Shop"
+            items={allShops}
+            selected={selectedShops}
+            onToggle={(v) => toggle(selectedShops, v, setSelectedShops)}
+            onAll={() => setSelectedShops(new Set(allShops))}
+            onNone={() => setSelectedShops(new Set())}
+            format={(v) => v}
+          />
+        </div>
+        {(selectedBrands.size === 0 || selectedSizes.size === 0 || selectedShops.size === 0) && (
           <p className="text-xs text-stone-400 pt-1">
-            Select at least one brand and one size to see data.
+            Select at least one brand, one size, and one shop to see data.
           </p>
         )}
       </div>
