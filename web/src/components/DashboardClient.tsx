@@ -8,71 +8,16 @@ import PriceTrendChart from "@/components/PriceTrendChart";
 import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
 import PriceScatterChart from "@/components/PriceScatterChart";
+import BrandDirectory from "@/components/BrandDirectory";
+import ShopDirectory from "@/components/ShopDirectory";
 
 type Props = {
   rows: PriceRow[];
   lastUpdated: string;
 };
 
-function ShopList({ rows }: { rows: PriceRow[] }) {
-  // Derive one entry per shop: name + base URL from the first product_url found
-  const shops = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of rows) {
-      if (!map.has(r.shop_name) && r.product_url) {
-        try {
-          const { origin } = new URL(r.product_url);
-          map.set(r.shop_name, origin);
-        } catch {
-          map.set(r.shop_name, "");
-        }
-      } else if (!map.has(r.shop_name)) {
-        map.set(r.shop_name, "");
-      }
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [rows]);
-
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
-      <h2 className="text-base font-semibold text-stone-800 mb-1">Shops</h2>
-      <p className="text-xs text-stone-400 mb-4">
-        {shops.length} shops tracked · click to visit
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {shops.map(([name, url]) =>
-          url ? (
-            <a
-              key={name}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-stone-200 text-stone-600 hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50 transition-colors"
-            >
-              {name}
-              <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-          ) : (
-            <span key={name} className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border border-stone-200 text-stone-400">
-              {name}
-            </span>
-          )
-        )}
-      </div>
-    </div>
-  );
-}
-
 function FilterBar<T extends string | number>({
-  label,
-  items,
-  selected,
-  onToggle,
-  onAll,
-  onNone,
-  format,
+  label, items, selected, onToggle, onAll, onNone, format,
 }: {
   label: string;
   items: T[];
@@ -85,9 +30,7 @@ function FilterBar<T extends string | number>({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">
-          {label}
-        </span>
+        <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">{label}</span>
         <div className="flex gap-2">
           <button onClick={onAll}  className="text-xs text-amber-600 hover:text-amber-800 font-medium">All</button>
           <span className="text-stone-200">|</span>
@@ -117,20 +60,9 @@ function FilterBar<T extends string | number>({
 }
 
 export default function DashboardClient({ rows, lastUpdated }: Props) {
-  const allBrands = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.brand))).sort(),
-    [rows]
-  );
-
-  const allSizes = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b),
-    [rows]
-  );
-
-  const allShops = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.shop_name))).sort(),
-    [rows]
-  );
+  const allBrands = useMemo(() => Array.from(new Set(rows.map((r) => r.brand))).sort(), [rows]);
+  const allSizes  = useMemo(() => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b), [rows]);
+  const allShops  = useMemo(() => Array.from(new Set(rows.map((r) => r.shop_name))).sort(), [rows]);
 
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set(allBrands));
   const [selectedSizes,  setSelectedSizes]  = useState<Set<number>>(new Set(allSizes));
@@ -151,6 +83,11 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
     [rows, selectedBrands, selectedSizes, selectedShops]
   );
 
+  const activeBrands = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.brand))).sort(),
+    [filtered]
+  );
+
   const stats    = scorecards(filtered);
   const trend    = pivotForTrend(filtered);
   const latest   = latestMonthRows(filtered);
@@ -161,9 +98,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
       {/* Filter bar */}
       <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-4">
         <FilterBar
-          label="Brand"
-          items={allBrands}
-          selected={selectedBrands}
+          label="Brand" items={allBrands} selected={selectedBrands}
           onToggle={(v) => toggle(selectedBrands, v, setSelectedBrands)}
           onAll={() => setSelectedBrands(new Set(allBrands))}
           onNone={() => setSelectedBrands(new Set())}
@@ -171,9 +106,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
         />
         <div className="border-t border-stone-50 pt-4">
           <FilterBar
-            label="Size"
-            items={allSizes}
-            selected={selectedSizes}
+            label="Size" items={allSizes} selected={selectedSizes}
             onToggle={(v) => toggle(selectedSizes, v, setSelectedSizes)}
             onAll={() => setSelectedSizes(new Set(allSizes))}
             onNone={() => setSelectedSizes(new Set())}
@@ -182,9 +115,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
         </div>
         <div className="border-t border-stone-50 pt-4">
           <FilterBar
-            label="Shop"
-            items={allShops}
-            selected={selectedShops}
+            label="Shop" items={allShops} selected={selectedShops}
             onToggle={(v) => toggle(selectedShops, v, setSelectedShops)}
             onAll={() => setSelectedShops(new Set(allShops))}
             onNone={() => setSelectedShops(new Set())}
@@ -208,7 +139,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
         lastUpdated={lastUpdated}
       />
 
-      {/* Charts + Table */}
+      {/* Charts + Directories + Table */}
       {filtered.length > 0 ? (
         <>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -219,10 +150,8 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
-
-          {/* Shop list */}
-          <ShopList rows={filtered} />
-
+          <BrandDirectory activeBrands={activeBrands} />
+          <ShopDirectory rows={filtered} />
           <PriceTable rows={filtered} />
         </>
       ) : (
