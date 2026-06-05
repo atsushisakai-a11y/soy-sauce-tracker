@@ -89,9 +89,6 @@ export default function AboutPage() {
               Skilled at embedding data governance, AI readiness, and compliance frameworks into platform foundations,
               and at translating data insights into measurable commercial value.
             </p>
-            <p className="font-medium text-amber-700 border-l-2 border-amber-400 pl-4">
-              Seeking a similarly high-impact platform leadership opportunity to bring business impact by data.
-            </p>
           </div>
         </div>
 
