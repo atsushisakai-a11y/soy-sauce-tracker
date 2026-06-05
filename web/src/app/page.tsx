@@ -92,10 +92,6 @@ export default async function Home() {
 
       {/* Hero banner */}
       <div className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-amber-950 to-stone-900">
-        {/* Decorative soy sauce drip pattern */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none select-none text-[10rem] leading-none tracking-tighter text-amber-300 overflow-hidden whitespace-nowrap">
-          🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙
-        </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7 sm:py-10 flex flex-col sm:flex-row items-center gap-8">
           {/* Icon + title */}
           <div className="flex-1 text-center sm:text-left">
@@ -126,8 +122,8 @@ export default async function Home() {
             </div>
           </div>
           {/* Big emoji visual */}
-          <div className="text-[5rem] sm:text-[6rem] leading-none drop-shadow-2xl select-none flex-shrink-0">
-            🫙
+          <div className="flex-shrink-0 drop-shadow-2xl">
+            <img src="/shoyu-bottle.png" alt="Soy sauce bottle" className="h-32 sm:h-40 w-auto" />
           </div>
         </div>
         {/* Bottom fade */}
