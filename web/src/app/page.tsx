@@ -96,7 +96,7 @@ export default async function Home() {
         <div className="absolute inset-0 opacity-10 pointer-events-none select-none text-[10rem] leading-none tracking-tighter text-amber-300 overflow-hidden whitespace-nowrap">
           🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙🫙
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-20 flex flex-col sm:flex-row items-center gap-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7 sm:py-10 flex flex-col sm:flex-row items-center gap-8">
           {/* Icon + title */}
           <div className="flex-1 text-center sm:text-left">
             <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full mb-4 tracking-wide uppercase">
@@ -126,7 +126,7 @@ export default async function Home() {
             </div>
           </div>
           {/* Big emoji visual */}
-          <div className="text-[8rem] sm:text-[10rem] leading-none drop-shadow-2xl select-none flex-shrink-0">
+          <div className="text-[5rem] sm:text-[6rem] leading-none drop-shadow-2xl select-none flex-shrink-0">
             🫙
           </div>
         </div>
