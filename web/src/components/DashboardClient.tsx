@@ -164,7 +164,10 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceTrendChart data={trend} products={products} />
             <PriceRangeChart rows={latest} />
           </div>
-          <PriceScatterChart rows={filtered} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <PriceScatterChart rows={filtered} colorBy="brand" />
+            <PriceScatterChart rows={filtered} colorBy="shop" />
+          </div>
           <PriceTable rows={filtered} />
         </>
       ) : (
