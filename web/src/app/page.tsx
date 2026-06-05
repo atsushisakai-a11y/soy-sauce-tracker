@@ -96,9 +96,6 @@ export default async function Home() {
           {/* Bottle + title */}
           <div className="flex items-center gap-5 flex-shrink-0">
             <div>
-              <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide uppercase">
-                🌍 Europe · {stats.lastUpdated} data
-              </div>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
                 European<br />
                 <span className="text-amber-400">Soy Sauce</span><br />
