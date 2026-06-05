@@ -138,14 +138,7 @@ export default async function Home() {
         <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-stone-50 to-transparent" />
       </div>
 
-      {/* Last scrape badge */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 flex justify-end">
-        <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 font-medium">
-          Last scrape: {stats.lastUpdated}
-        </span>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+<div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
             <strong>Data error:</strong> {error}
