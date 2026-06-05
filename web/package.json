@@ -9,19 +9,20 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-cloud/bigquery": "^7.3.0",
+    "@vercel/analytics": "^2.0.1",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
-    "@google-cloud/bigquery": "^7.3.0",
     "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "typescript": "^5",
-    "tailwindcss": "^3.4.4",
     "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38"
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5"
   }
 }
