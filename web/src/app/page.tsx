@@ -93,20 +93,32 @@ export default async function Home() {
       {/* Hero banner */}
       <div className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-amber-950 to-stone-900">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7 sm:py-10 flex flex-col sm:flex-row items-center gap-8">
-          {/* Icon + title */}
-          <div className="flex-1 text-center sm:text-left">
-            <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full mb-4 tracking-wide uppercase">
-              🌍 Europe · {stats.lastUpdated} data
+          {/* Bottle + title */}
+          <div className="flex items-center gap-5 flex-shrink-0">
+            <div className="drop-shadow-2xl">
+              <img src="/shoyu-bottle.png" alt="Soy sauce bottle" className="h-28 sm:h-36 w-auto" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight mb-4">
-              European<br />
-              <span className="text-amber-400">Soy Sauce</span><br />
-              Price Tracker
-            </h1>
-            <p className="text-stone-300 text-lg leading-relaxed max-w-lg">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full mb-3 tracking-wide uppercase">
+                🌍 Europe · {stats.lastUpdated} data
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
+                European<br />
+                <span className="text-amber-400">Soy Sauce</span><br />
+                Price Tracker
+              </h1>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="hidden sm:block w-px self-stretch bg-white/10" />
+
+          {/* Tagline + stats */}
+          <div className="flex-1 text-center sm:text-left">
+            <p className="text-stone-300 text-base leading-relaxed mb-5">
               Compare soy sauce prices across European online shops — so you always know where to find the best bottle at the best price.
             </p>
-            <div className="flex flex-wrap gap-3 mt-6 justify-center sm:justify-start">
+            <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
               <span className="flex items-center gap-1.5 text-xs text-stone-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>
                 Monthly price scraping
@@ -120,10 +132,6 @@ export default async function Home() {
                 {stats.shops}+ shops compared
               </span>
             </div>
-          </div>
-          {/* Big emoji visual */}
-          <div className="flex-shrink-0 drop-shadow-2xl">
-            <img src="/shoyu-bottle.png" alt="Soy sauce bottle" className="h-32 sm:h-40 w-auto" />
           </div>
         </div>
         {/* Bottom fade */}
