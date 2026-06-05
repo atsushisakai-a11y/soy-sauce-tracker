@@ -12,7 +12,7 @@ type ShopMeta = {
 const SHOP_META: Record<string, ShopMeta> = {
   "Dun Yong": {
     flag: "🇳🇱",
-    desc: "Amsterdam's largest Asian supermarket chain with multiple locations. One of the most comprehensive soy sauce selections in the Netherlands.",
+    desc: "Amsterdam's largest Asian supermarket — established 1969, multiple city locations plus an online shop delivering across NL. Stocks an exceptional range of Japanese, Chinese, Korean and Southeast Asian soy sauces including premium and hard-to-find varieties.",
   },
   "Shilla Market": {
     flag: "🇳🇱",
