@@ -16,6 +16,7 @@ Soy sauce category pages (for manual reference / future updates):
   Albert Heijn    : https://www.ah.nl/producten/6409/soepen-sauzen-kruiden-olie?Soort=4421
   Jumbo           : https://www.jumbo.com/producten/wereldkeukens,-kruiden,-pasta-en-rijst/aziatische-keuken/bijgerechten-en-sauzen/ketjap-en-sojasaus/
   ACE Market      : https://acemarket.nl/categorie/sauzen/sauzen-dressings/sojasaus/
+  Toko Gembira    : https://www.tokogembira.nl/nl/producten/sauzen/ketjap-sojasaus-3276154/
 """
 
 import csv
@@ -118,6 +119,43 @@ SHOPS = [
         "https://www.tjinstoko.eu/nl/sempio-soy-sauce-rich-mellow-jin-s-500ml.html",
     ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
+    {"shop_name": "Toko Gembira", "website": "https://www.tokogembira.nl", "direct_product_urls": [
+        # Kikkoman
+        "https://www.tokogembira.nl/nl/kikkoman-sojasaus-500-ml.html",
+        "https://www.tokogembira.nl/nl/kikkoman-sojasaus-1-l.html",
+        "https://www.tokogembira.nl/nl/kikkoman-soja-saus-1-liter.html",
+        "https://www.tokogembira.nl/nl/kikkoman-soja-saus-250ml.html",
+        "https://www.tokogembira.nl/nl/soy-sauce-150ml-less-salt.html",
+        "https://www.tokogembira.nl/nl/tamari-gluten-free-soy-sauce-150ml-kikkoman.html",
+        # Yamasa
+        "https://www.tokogembira.nl/nl/yamasa-soy-sauce-1-liter.html",
+        # Pearl River Bridge
+        "https://www.tokogembira.nl/nl/golden-label-sojasaus500ml.html",
+        "https://www.tokogembira.nl/nl/light-soja-saus-150-ml.html",
+        "https://www.tokogembira.nl/nl/mushroom-dark-soy-sauce-150ml-pearl-river-bridge.html",
+        "https://www.tokogembira.nl/nl/superieure-donkere-sojasaus-500ml.html",
+        # Lee Kum Kee
+        "https://www.tokogembira.nl/nl/gyoza-sauce-150ml-lee-kum-kee.html",
+        "https://www.tokogembira.nl/nl/shallot-seasoned-soy-sauce-207ml-lee-kum-kee.html",
+        "https://www.tokogembira.nl/nl/sweet-soy-sauce-for-dim-sum-rice-207ml-lee-kum-kee.html",
+        # Mee Chun
+        "https://www.tokogembira.nl/nl/soy-sauce-250ml-mee-chun.html",
+        "https://www.tokogembira.nl/nl/sojasaus-mee-chun-250-ml.html",
+        "https://www.tokogembira.nl/nl/spiced-mushroom-soy-sauce-500ml-mee-chun.html",
+        # Healthy Boy
+        "https://www.tokogembira.nl/nl/healthy-boy-brand-thin-soy-sauce-700ml.html",
+        "https://www.tokogembira.nl/nl/healthy-boy-brand-soy-sauce-with-mushroom-700ml.html",
+        "https://www.tokogembira.nl/nl/healthy-boy-brand-naturally-fermented-soy-sauce-10.html",
+        # Silver Swan
+        "https://www.tokogembira.nl/nl/silver-swan-soy-sauce-1l.html",
+        "https://www.tokogembira.nl/nl/silver-swan-soy-sauce-385ml.html",
+        # ABC
+        "https://www.tokogembira.nl/nl/abc-kecap-manis-600ml.html",
+        "https://www.tokogembira.nl/nl/abc-kecap-manis-zoet-275ml.html",
+        # Dek Som Boon
+        "https://www.tokogembira.nl/nl/black-soy-sauce-formule-2-700ml-desk-som-boon-yell.html",
+        "https://www.tokogembira.nl/nl/sweet-soy-sauce-970g-dek-som-boon.html",
+    ]},
     {"shop_name": "ACE Market", "website": "https://acemarket.nl", "direct_product_urls": [
         "https://acemarket.nl/product/kikkoman-soy-sauce-dispenser-150ml/",
         "https://acemarket.nl/product/kikkoman-soy-sauce-japanese-500ml/",
@@ -242,6 +280,17 @@ def _extract_price_from_page(shop_name, title, product_url, page_image_url, soup
             return _make_record(shop_name, title, f"€{float(raw):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
         except ValueError:
             pass
+
+    # Webshopapp (Toko Gembira etc.): <span class="item-price">€5,49</span>
+    # Multiple spans may exist (cart widget has empty ones) — find first non-zero
+    for item_price in soup.find_all("span", class_="item-price"):
+        raw = item_price.get_text(strip=True).replace("€", "").replace("\xa0", "").replace(",", ".").strip()
+        try:
+            price_val = float(raw)
+            if price_val > 0:
+                return _make_record(shop_name, title, f"€{price_val:.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
+        except ValueError:
+            continue
 
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
