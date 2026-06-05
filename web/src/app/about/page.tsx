@@ -42,6 +42,29 @@ export default function AboutPage() {
           </div>
         </div>
 
+        {/* Skills */}
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-8">
+          <h2 className="text-base font-semibold text-stone-800 mb-6">Skills & Expertise</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              { category: "Data Engineering", items: ["SQL", "ETL Pipelines", "dbt", "BigQuery", "Snowflake", "Python"] },
+              { category: "Platform & Architecture", items: ["Semantic Layer Design", "KPI Governance", "Data Modelling", "SCD Type 2", "Medallion Architecture"] },
+              { category: "Leadership", items: ["Multi-site Harmonisation", "Vendor Management", "Executive Reporting", "Data Governance", "AI Readiness"] },
+            ].map((s) => (
+              <div key={s.category}>
+                <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-widest mb-3">{s.category}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {s.items.map((item) => (
+                    <span key={item} className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-medium">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* This project */}
         <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-8">
           <h2 className="text-base font-semibold text-stone-800 mb-2">About This Project</h2>
