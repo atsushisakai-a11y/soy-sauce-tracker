@@ -28,12 +28,12 @@ export default function AboutPage() {
           <div className="bg-gradient-to-br from-amber-500 to-orange-600 h-28" />
           <div className="px-8 pb-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6 -mt-14">
-              <div className="relative w-28 h-28 rounded-2xl border-4 border-white shadow-lg overflow-hidden flex-shrink-0 bg-stone-100">
+              <div className="relative w-32 h-40 rounded-2xl border-4 border-white shadow-lg overflow-hidden flex-shrink-0 bg-stone-100">
                 <Image
                   src="/atsushi.jpg"
                   alt="Atsushi Sakai"
                   fill
-                  className="object-cover object-top"
+                  className="object-cover object-[center_10%]"
                   priority
                 />
               </div>
