@@ -91,8 +91,8 @@ export default async function Home() {
     <main className="min-h-screen bg-stone-50">
 
       {/* Hero banner */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-amber-950 to-stone-900">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7 sm:py-10 flex flex-col sm:flex-row items-center gap-8">
+      <div className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-amber-950 to-stone-900 min-h-[160px] flex items-center">
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center gap-8">
           {/* Bottle + title */}
           <div className="flex items-center gap-5 flex-shrink-0">
             <div>
