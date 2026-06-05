@@ -20,7 +20,7 @@ const SHOP_META: Record<string, ShopMeta> = {
   },
   "Tjin's Toko": {
     flag: "🇳🇱",
-    desc: "Rotterdam-based Asian grocery, one of the oldest in the Netherlands. Wide variety of Japanese, Chinese, and Southeast Asian sauces.",
+    desc: "Rotterdam's oldest Asian grocery with one of the largest soy sauce ranges in the Netherlands — 10+ brands across Japanese, Chinese, Korean and Southeast Asian varieties. English website available.",
   },
   "Oriental Webshop": {
     flag: "🇳🇱",
