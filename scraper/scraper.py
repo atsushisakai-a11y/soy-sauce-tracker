@@ -17,6 +17,8 @@ Soy sauce category pages (for manual reference / future updates):
   Jumbo           : https://www.jumbo.com/producten/wereldkeukens,-kruiden,-pasta-en-rijst/aziatische-keuken/bijgerechten-en-sauzen/ketjap-en-sojasaus/
   ACE Market      : https://acemarket.nl/categorie/sauzen/sauzen-dressings/sojasaus/
   Toko Gembira    : https://www.tokogembira.nl/nl/producten/sauzen/ketjap-sojasaus-3276154/
+  Toko Asia       : https://www.tokoazia.nl/Sojasaus
+  PLUS            : https://www.plus.nl/zoekresultaten?SearchTerm=soja%20saus (JS-only, not scraped)
 """
 
 import csv
@@ -145,6 +147,39 @@ SHOPS = [
         "https://www.tjinstoko.eu/en/abc-kecap-manis-600ml.html",
     ]},
     {"shop_name": "Toko Dua Saudara",   "website": "https://toko-dua-saudara.nl"},
+    {"shop_name": "Toko Asia", "website": "https://www.tokoazia.nl", "direct_product_urls": [
+        # Kikkoman
+        "https://www.tokoazia.nl/Kikkoman-Soy-Sauce-1-Liter",
+        "https://www.tokoazia.nl/Kikkoman-Soy-Sauce-500-ml",
+        "https://www.tokoazia.nl/Kikkoman-Soy-Sauce-250-ml",
+        "https://www.tokoazia.nl/Kikkoman-Soja-Sauce-150-ml",
+        "https://www.tokoazia.nl/Kikkoman-Less-Salt-Soy-Sauce-1-Liter",
+        "https://www.tokoazia.nl/Kikkoman-Less-Salt-Soy-Sauce-150-ml",
+        "https://www.tokoazia.nl/Kikkoman-Tamari-Soy-Sauce-250-ml",
+        "https://www.tokoazia.nl/KIKKOMAN-SOY-SAUCE-GLUTEN-FREE-TAMARI-1LITER",
+        "https://www.tokoazia.nl/KIKKOMAN-GLUTEN-FREE-SOJASAUS-TAMARI-150ML",
+        "https://www.tokoazia.nl/KIKKOMAN-PONZU-LEMON-SOY-SAUCE-250-ML",
+        "https://www.tokoazia.nl/KZ-Soy-Sauce-Sushi-Sashimi-200-ml",
+        "https://www.tokoazia.nl/KIKKOMAN-BIO-SOJASAUCE-150-ML",
+        # Yamasa
+        "https://www.tokoazia.nl/YAMASA-SOJASAUS-FANCY-1LITER",
+        # Lee Kum Kee
+        "https://www.tokoazia.nl/LKK-Premium-Light-Soy-Sauce-500-ml",
+        "https://www.tokoazia.nl/LKK-Premium-Dark-Soy-Sauce-500-ml",
+        # Pearl River Bridge
+        "https://www.tokoazia.nl/Golden-Label-Lichte-Sojasaus",
+        # Sempio
+        "https://www.tokoazia.nl/SEMPIO-SOY-SAUCE-SALT-PET-500ML",
+        # Mee Chun
+        "https://www.tokoazia.nl/Mee-Chun-Best-Soy-Sauce-250-ml",
+        "https://www.tokoazia.nl/Mee-Chun-Best-Soy-Sauce-500-ml",
+        # Healthy Boy
+        "https://www.tokoazia.nl/HEALTHY-BOY-THIN-SOY-SAUCE-700ML",
+        "https://www.tokoazia.nl/HB-Black-Soy-Sauce-700-ml",
+        "https://www.tokoazia.nl/HB-Mushroom-Soy-Sauce-700-ml",
+        "https://www.tokoazia.nl/HB-Thin-Soy-Sauce-300-ml",
+        "https://www.tokoazia.nl/HB-Soy-Sauce-Mushroom-300-ml",
+    ]},
     {"shop_name": "Toko Gembira", "website": "https://www.tokogembira.nl", "direct_product_urls": [
         # Kikkoman
         "https://www.tokogembira.nl/nl/kikkoman-sojasaus-500-ml.html",
@@ -304,6 +339,17 @@ def _extract_price_from_page(shop_name, title, product_url, page_image_url, soup
         raw = woo.get_text(strip=True).replace("€", "").replace("\xa0", "").replace(",", ".").strip()
         try:
             return _make_record(shop_name, title, f"€{float(raw):.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
+        except ValueError:
+            pass
+
+    # Toko Asia (CS-Cart): <span id="Price1_inc">€ 9,98</span>
+    price_span = soup.find("span", {"id": "Price1_inc"})
+    if price_span:
+        raw = price_span.get_text(strip=True).replace("€", "").replace("\xa0", "").replace(",", ".").strip()
+        try:
+            price_val = float(raw)
+            if price_val > 0:
+                return _make_record(shop_name, title, f"€{price_val:.2f}", "EUR", product_url, page_image_url, scrape_run_id, scraped_at)
         except ValueError:
             pass
 

@@ -38,6 +38,14 @@ const SHOP_META: Record<string, ShopMeta> = {
     flag: "🇩🇪",
     desc: "Germany-based Japanese food specialist delivering across Europe. Curated selection of premium Japanese soy sauces and condiments.",
   },
+  "Toko Asia": {
+    flag: "🇳🇱",
+    desc: "Dutch online Asian supermarket stocking a broad range of Japanese, Chinese and Southeast Asian soy sauces. Good coverage of Kikkoman, Yamasa, Lee Kum Kee and Healthy Boy.",
+  },
+  "PLUS": {
+    flag: "🇳🇱",
+    desc: "Major Dutch supermarket chain with ~500 locations nationwide. Carries mainstream soy sauce brands (Kikkoman, Lee Kum Kee) at accessible prices — highly convenient for everyday shoppers.",
+  },
   "Toko Dua Saudara": {
     flag: "🇳🇱",
     desc: "Traditional Dutch toko specialising in Indonesian and Southeast Asian groceries. Good source for kecap manis and Indonesian soy sauces.",
