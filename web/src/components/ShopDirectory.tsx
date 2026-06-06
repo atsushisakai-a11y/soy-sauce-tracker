@@ -46,6 +46,10 @@ const SHOP_META: Record<string, ShopMeta> = {
     flag: "🇳🇱",
     desc: "Major Dutch supermarket chain with ~500 locations nationwide. Carries mainstream soy sauce brands (Kikkoman, Lee Kum Kee) at accessible prices — highly convenient for everyday shoppers.",
   },
+  "Sligro": {
+    flag: "🇳🇱",
+    desc: "Dutch B2B wholesale & foodservice supplier with 50+ cash-and-carry locations. Stocks large-format soy sauce (Kikkoman 1.9L, Lee Kum Kee 1.9L, Pearl River Bridge) ideal for restaurants and catering. Requires a business account.",
+  },
   "Toko Dua Saudara": {
     flag: "🇳🇱",
     desc: "Traditional Dutch toko specialising in Indonesian and Southeast Asian groceries. Good source for kecap manis and Indonesian soy sauces.",

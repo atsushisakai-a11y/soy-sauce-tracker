@@ -108,6 +108,18 @@ const SHOP_META: Record<string, ShopMeta> = {
     reliabilityScore: 4,
     overallScore: 3,
   },
+  "Sligro": {
+    flag: "🇳🇱",
+    url: "https://www.sligro.nl/c.230.html/kruidenierswaren/sauzen-soepen-dressings/sauzen-toebehoren/ketjap-sojasauzen.html",
+    tagline: "Dutch B2B wholesale supplier. Large-format soy sauce at professional prices.",
+    strengths: ["50+ cash-and-carry locations", "Large-format bottles (1.9L)", "Restaurant & catering focus", "Kikkoman, LKK, Pearl River Bridge"],
+    bestFor: "Restaurants, catering businesses, or bulk buyers with a business account",
+    verdict: "Sligro is a wholesale/foodservice supplier — not for regular consumers. If you run a restaurant or buy in bulk, they offer large-format soy sauce at competitive wholesale prices. Prices require a free business account to view.",
+    priceTag: "💚 Cheapest",
+    selectionScore: 3,
+    reliabilityScore: 5,
+    overallScore: 3,
+  },
   "PLUS": {
     flag: "🇳🇱",
     url: "https://www.plus.nl/zoekresultaten?SearchTerm=soja%20saus",

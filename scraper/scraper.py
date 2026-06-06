@@ -19,6 +19,7 @@ Soy sauce category pages (for manual reference / future updates):
   Toko Gembira    : https://www.tokogembira.nl/nl/producten/sauzen/ketjap-sojasaus-3276154/
   Toko Asia       : https://www.tokoazia.nl/Sojasaus
   PLUS            : https://www.plus.nl/zoekresultaten?SearchTerm=soja%20saus (JS-only, not scraped)
+  Sligro          : https://www.sligro.nl/c.230.html/.../ketjap-sojasauzen.html (B2B login required, not scraped)
 """
 
 import csv
