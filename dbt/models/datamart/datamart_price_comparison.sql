@@ -17,6 +17,10 @@ WITH per_shop AS (
     FROM {{ ref('fact_price') }}  f
     JOIN {{ ref('dim_price') }}   d  ON f.product_id = d.product_id
 
+    WHERE DATE_TRUNC(f.scrape_date, MONTH) = (
+        SELECT MAX(DATE_TRUNC(scrape_date, MONTH)) FROM {{ ref('fact_price') }}
+    )
+
     GROUP BY 1, 2, 3
 
 )

@@ -112,7 +112,7 @@ async function fetchByBrand(): Promise<BrandRow[]> {
       ROUND(max_price_per_100ml, 2)        AS max_price_per_100ml,
       ROUND(avg_price_eur, 2)              AS avg_price_eur
     FROM \`soy-sauce-tracker.datamart.datamart_price_comparison_by_brand\`
-    ORDER BY scrape_month DESC, avg_price_per_100ml ASC
+    ORDER BY avg_price_per_100ml ASC
   `);
   return rows as BrandRow[];
 }
@@ -130,7 +130,7 @@ async function fetchByShop(): Promise<ShopRow[]> {
       ROUND(max_price_per_100ml, 2)        AS max_price_per_100ml,
       ROUND(avg_price_eur, 2)              AS avg_price_eur
     FROM \`soy-sauce-tracker.datamart.datamart_price_comparison_by_shop\`
-    ORDER BY scrape_month DESC, avg_price_per_100ml ASC
+    ORDER BY avg_price_per_100ml ASC
   `);
   return rows as ShopRow[];
 }

@@ -20,4 +20,6 @@ SELECT
 
 FROM {{ ref('datamart_price_comparison') }}
 
+WHERE scrape_month = (SELECT MAX(scrape_month) FROM {{ ref('datamart_price_comparison') }})
+
 GROUP BY 1, 2

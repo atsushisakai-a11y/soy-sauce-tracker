@@ -41,14 +41,11 @@ function HorizontalBar<T extends Record<string, unknown>>({
   nameKey: keyof T;
   tooltipSubtitle: (row: Record<string, number>) => string;
 }) {
-  // Latest month only
-  const months = [...new Set(data.map((r) => r.scrape_month as string))].sort();
-  const latest = months[months.length - 1];
-  const latestData = data
-    .filter((r) => r.scrape_month === latest)
-    .sort((a, b) => (a.avg_price_per_100ml as number) - (b.avg_price_per_100ml as number));
-
-  const chartData = latestData.map((r) => ({
+  // Data is already latest-month-only from the datamart — just sort
+  const latestMonth = data.length > 0 ? (data[0].scrape_month as string) : "";
+  const chartData = [...data]
+    .sort((a, b) => (a.avg_price_per_100ml as number) - (b.avg_price_per_100ml as number))
+    .map((r) => ({
     ...r,
     name: r[nameKey] as string,
     value: r.avg_price_per_100ml as number,
@@ -59,7 +56,7 @@ function HorizontalBar<T extends Record<string, unknown>>({
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
       <h2 className="text-base font-semibold text-stone-800 mb-1">{title}</h2>
-      <p className="text-xs text-stone-400 mb-4">{subtitle} · {latest}</p>
+      <p className="text-xs text-stone-400 mb-4">{subtitle} · {latestMonth}</p>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
           data={chartData}
