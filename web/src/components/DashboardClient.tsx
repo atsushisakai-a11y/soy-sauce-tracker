@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { PriceRow } from "@/app/api/prices/route";
+import type { BrandRow, ShopRow } from "@/app/page";
 import { pivotForTrend, latestMonthRows, productNames, scorecards, formatSize } from "@/lib/transforms";
 import Scorecards from "@/components/Scorecards";
 import PriceTrendChart from "@/components/PriceTrendChart";
@@ -14,6 +15,8 @@ import ShopDirectory from "@/components/ShopDirectory";
 
 type Props = {
   rows: PriceRow[];
+  byBrand: BrandRow[];
+  byShop: ShopRow[];
   lastUpdated: string;
 };
 
@@ -60,7 +63,7 @@ function FilterBar<T extends string | number>({
   );
 }
 
-export default function DashboardClient({ rows, lastUpdated }: Props) {
+export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: Props) {
   const allBrands = useMemo(() => Array.from(new Set(rows.map((r) => r.brand))).sort(), [rows]);
   const allSizes  = useMemo(() => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b), [rows]);
   const allShops  = useMemo(() => Array.from(new Set(rows.map((r) => r.shop_name))).sort(), [rows]);
@@ -151,7 +154,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
-          <Price100mlChart rows={filtered} />
+          <Price100mlChart byBrand={byBrand} byShop={byShop} />
           <BrandDirectory activeBrands={activeBrands} />
           <ShopDirectory rows={filtered} />
           <PriceTable rows={filtered} />

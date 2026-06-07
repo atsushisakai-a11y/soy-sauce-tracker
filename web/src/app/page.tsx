@@ -46,16 +46,39 @@ function DbtSummaryCard() {
   }
 }
 
-async function fetchPrices(): Promise<PriceRow[]> {
+export type BrandRow = {
+  brand: string;
+  scrape_month: string;
+  product_count: number;
+  shop_count: number;
+  avg_price_per_100ml: number;
+  min_price_per_100ml: number;
+  max_price_per_100ml: number;
+  avg_price_eur: number;
+};
+
+export type ShopRow = {
+  shop_name: string;
+  scrape_month: string;
+  product_count: number;
+  brand_count: number;
+  avg_price_per_100ml: number;
+  min_price_per_100ml: number;
+  max_price_per_100ml: number;
+  avg_price_eur: number;
+};
+
+async function getBqClient() {
   const { BigQuery } = await import("@google-cloud/bigquery");
-  let bq: InstanceType<typeof BigQuery>;
   const credJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (credJson) {
-    const credentials = JSON.parse(credJson);
-    bq = new BigQuery({ projectId: "soy-sauce-tracker", credentials });
-  } else {
-    bq = new BigQuery({ projectId: "soy-sauce-tracker" });
+    return new BigQuery({ projectId: "soy-sauce-tracker", credentials: JSON.parse(credJson) });
   }
+  return new BigQuery({ projectId: "soy-sauce-tracker" });
+}
+
+async function fetchPrices(): Promise<PriceRow[]> {
+  const bq = await getBqClient();
   const [rows] = await bq.query(`
     SELECT
       global_product_id,
@@ -76,12 +99,54 @@ async function fetchPrices(): Promise<PriceRow[]> {
   return rows as PriceRow[];
 }
 
+async function fetchByBrand(): Promise<BrandRow[]> {
+  const bq = await getBqClient();
+  const [rows] = await bq.query(`
+    SELECT
+      brand,
+      FORMAT_DATE('%Y-%m', scrape_month)   AS scrape_month,
+      CAST(product_count AS INT64)         AS product_count,
+      CAST(shop_count    AS INT64)         AS shop_count,
+      ROUND(avg_price_per_100ml, 2)        AS avg_price_per_100ml,
+      ROUND(min_price_per_100ml, 2)        AS min_price_per_100ml,
+      ROUND(max_price_per_100ml, 2)        AS max_price_per_100ml,
+      ROUND(avg_price_eur, 2)              AS avg_price_eur
+    FROM \`soy-sauce-tracker.datamart.datamart_price_comparison_by_brand\`
+    ORDER BY scrape_month DESC, avg_price_per_100ml ASC
+  `);
+  return rows as BrandRow[];
+}
+
+async function fetchByShop(): Promise<ShopRow[]> {
+  const bq = await getBqClient();
+  const [rows] = await bq.query(`
+    SELECT
+      shop_name,
+      FORMAT_DATE('%Y-%m', scrape_month)   AS scrape_month,
+      CAST(product_count AS INT64)         AS product_count,
+      CAST(brand_count   AS INT64)         AS brand_count,
+      ROUND(avg_price_per_100ml, 2)        AS avg_price_per_100ml,
+      ROUND(min_price_per_100ml, 2)        AS min_price_per_100ml,
+      ROUND(max_price_per_100ml, 2)        AS max_price_per_100ml,
+      ROUND(avg_price_eur, 2)              AS avg_price_eur
+    FROM \`soy-sauce-tracker.datamart.datamart_price_comparison_by_shop\`
+    ORDER BY scrape_month DESC, avg_price_per_100ml ASC
+  `);
+  return rows as ShopRow[];
+}
+
 export default async function Home() {
   let rows: PriceRow[] = [];
+  let byBrand: BrandRow[] = [];
+  let byShop: ShopRow[] = [];
   let error: string | null = null;
 
   try {
-    rows = await fetchPrices();
+    [rows, byBrand, byShop] = await Promise.all([
+      fetchPrices(),
+      fetchByBrand(),
+      fetchByShop(),
+    ]);
   } catch (e) {
     error = e instanceof Error ? e.message : "Unknown error";
   }
@@ -139,7 +204,7 @@ export default async function Home() {
         )}
 
         {/* Brand filter + all charts/table (client component) */}
-        <DashboardClient rows={rows} lastUpdated={stats.lastUpdated} />
+        <DashboardClient rows={rows} byBrand={byBrand} byShop={byShop} lastUpdated={stats.lastUpdated} />
 
         {/* dbt quality card */}
         <DbtSummaryCard />

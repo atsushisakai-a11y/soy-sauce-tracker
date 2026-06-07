@@ -1,72 +1,68 @@
 "use client";
 
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, LabelList,
 } from "recharts";
-import type { PriceRow } from "@/app/api/prices/route";
-import { latestMonthRows } from "@/lib/transforms";
+import type { BrandRow, ShopRow } from "@/app/page";
 import { CHART_COLORS } from "@/lib/transforms";
 
-type Props = { rows: PriceRow[] };
-
-type BarEntry = { name: string; value: number; color: string };
+type Props = { byBrand: BrandRow[]; byShop: ShopRow[] };
 
 function fmt(n: number) {
   return n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
 
 function CustomTooltip({
-  active,
-  payload,
-  label,
-  suffix,
+  active, payload, label, subtitle,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number }>;
+  payload?: Array<{ value: number; payload: Record<string, number> }>;
   label?: string;
-  suffix: string;
+  subtitle: (p: Record<string, number>) => string;
 }) {
   if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
   return (
-    <div className="bg-white border border-stone-200 rounded-xl shadow-lg p-3 text-xs">
+    <div className="bg-white border border-stone-200 rounded-xl shadow-lg p-3 text-xs max-w-[200px]">
       <p className="font-semibold text-stone-800 mb-1">{label}</p>
-      <p className="text-stone-500">
-        Avg <strong className="text-stone-800">{fmt(payload[0].value)}</strong> / 100ml
-      </p>
-      <p className="text-stone-400 mt-0.5">{suffix}</p>
+      <p className="text-stone-600">Avg <strong>{fmt(payload[0].value)}</strong> / 100ml</p>
+      <p className="text-stone-400 mt-1">{subtitle(p)}</p>
     </div>
   );
 }
 
-function HorizontalBar({
-  title,
-  subtitle,
-  data,
-  tooltipSuffix,
+function HorizontalBar<T extends Record<string, unknown>>({
+  title, subtitle, data, nameKey, tooltipSubtitle,
 }: {
   title: string;
   subtitle: string;
-  data: BarEntry[];
-  tooltipSuffix: string;
+  data: T[];
+  nameKey: keyof T;
+  tooltipSubtitle: (row: Record<string, number>) => string;
 }) {
-  const barHeight = 32;
-  const chartHeight = Math.max(200, data.length * barHeight + 40);
+  // Latest month only
+  const months = [...new Set(data.map((r) => r.scrape_month as string))].sort();
+  const latest = months[months.length - 1];
+  const latestData = data
+    .filter((r) => r.scrape_month === latest)
+    .sort((a, b) => (a.avg_price_per_100ml as number) - (b.avg_price_per_100ml as number));
+
+  const chartData = latestData.map((r) => ({
+    ...r,
+    name: r[nameKey] as string,
+    value: r.avg_price_per_100ml as number,
+  }));
+
+  const chartHeight = Math.max(200, chartData.length * 34 + 40);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6">
       <h2 className="text-base font-semibold text-stone-800 mb-1">{title}</h2>
-      <p className="text-xs text-stone-400 mb-4">{subtitle}</p>
+      <p className="text-xs text-stone-400 mb-4">{subtitle} · {latest}</p>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
-          data={data}
+          data={chartData}
           layout="vertical"
           margin={{ top: 0, right: 80, left: 8, bottom: 0 }}
         >
@@ -81,20 +77,18 @@ function HorizontalBar({
           <YAxis
             type="category"
             dataKey="name"
-            width={110}
+            width={115}
             tick={{ fontSize: 11, fill: "#44403c" }}
             tickLine={false}
             axisLine={false}
           />
           <Tooltip
-            content={
-              <CustomTooltip suffix={tooltipSuffix} />
-            }
+            content={<CustomTooltip subtitle={tooltipSubtitle} />}
             cursor={{ fill: "#f5f5f4" }}
           />
           <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22}>
-            {data.map((entry, i) => (
-              <Cell key={i} fill={entry.color} fillOpacity={0.85} />
+            {chartData.map((_, i) => (
+              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.85} />
             ))}
             <LabelList
               dataKey="value"
@@ -109,53 +103,29 @@ function HorizontalBar({
   );
 }
 
-export default function Price100mlChart({ rows }: Props) {
-  const latest = latestMonthRows(rows);
-
-  // --- By brand ---
-  const brandMap = new Map<string, number[]>();
-  for (const r of latest) {
-    if (!brandMap.has(r.brand)) brandMap.set(r.brand, []);
-    brandMap.get(r.brand)!.push(r.avg_price_per_100ml);
-  }
-  const brandData: BarEntry[] = Array.from(brandMap.entries())
-    .map(([name, vals], i) => ({
-      name,
-      value: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-    }))
-    .sort((a, b) => a.value - b.value); // cheapest first
-
-  // --- By shop ---
-  const shopMap = new Map<string, number[]>();
-  for (const r of latest) {
-    if (!shopMap.has(r.shop_name)) shopMap.set(r.shop_name, []);
-    shopMap.get(r.shop_name)!.push(r.avg_price_per_100ml);
-  }
-  const shopData: BarEntry[] = Array.from(shopMap.entries())
-    .map(([name, vals], i) => ({
-      name,
-      value: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-    }))
-    .sort((a, b) => a.value - b.value); // cheapest first
+export default function Price100mlChart({ byBrand, byShop }: Props) {
+  if (!byBrand.length && !byShop.length) return null;
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <HorizontalBar
-          title="Best Value — by Brand"
-          subtitle="Avg €/100ml across all products · latest month · cheapest first"
-          data={brandData}
-          tooltipSuffix="avg across all sizes & shops"
-        />
-        <HorizontalBar
-          title="Best Value — by Shop"
-          subtitle="Avg €/100ml across all products · latest month · cheapest first"
-          data={shopData}
-          tooltipSuffix="avg across all products stocked"
-        />
-      </div>
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <HorizontalBar<BrandRow>
+        title="Best Value — by Brand"
+        subtitle="Avg €/100ml · cheapest first"
+        data={byBrand}
+        nameKey="brand"
+        tooltipSubtitle={(p) =>
+          `${p.product_count} products · ${p.shop_count} shops`
+        }
+      />
+      <HorizontalBar<ShopRow>
+        title="Best Value — by Shop"
+        subtitle="Avg €/100ml · cheapest first"
+        data={byShop}
+        nameKey="shop_name"
+        tooltipSubtitle={(p) =>
+          `${p.product_count} products · ${p.brand_count} brands`
+        }
+      />
     </div>
   );
 }

@@ -27,8 +27,8 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
-      - name: dbt run - datamart_price_comparison
-        run: cd dbt && dbt run --select datamart_price_comparison
+      - name: dbt run - all datamart models
+        run: cd dbt && dbt run --select datamart_price_comparison datamart_price_comparison_by_brand datamart_price_comparison_by_shop
 
-      - name: dbt test - datamart_price_comparison
-        run: cd dbt && dbt test --select datamart_price_comparison
+      - name: dbt test - all datamart models
+        run: cd dbt && dbt test --select datamart_price_comparison datamart_price_comparison_by_brand datamart_price_comparison_by_shop

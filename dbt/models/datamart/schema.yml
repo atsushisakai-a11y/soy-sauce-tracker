@@ -39,3 +39,39 @@ models:
       - name: avg_price_per_100ml
         description: "Average price per 100ml (EUR) — useful for comparing value across different bottle sizes."
         tests: [not_null]
+
+  - name: datamart_price_comparison_by_brand
+    description: "Datamart — avg price per 100ml aggregated by brand and month. One row per brand per scrape_month."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [brand, scrape_month]
+    columns:
+      - name: brand
+        tests: [not_null]
+      - name: scrape_month
+        tests: [not_null]
+      - name: product_count
+        tests: [not_null]
+      - name: shop_count
+        tests: [not_null]
+      - name: avg_price_per_100ml
+        tests: [not_null]
+
+  - name: datamart_price_comparison_by_shop
+    description: "Datamart — avg price per 100ml aggregated by shop and month. One row per shop per scrape_month."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [shop_name, scrape_month]
+    columns:
+      - name: shop_name
+        tests: [not_null]
+      - name: scrape_month
+        tests: [not_null]
+      - name: product_count
+        tests: [not_null]
+      - name: brand_count
+        tests: [not_null]
+      - name: avg_price_per_100ml
+        tests: [not_null]
