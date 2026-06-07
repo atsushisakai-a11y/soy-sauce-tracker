@@ -142,14 +142,14 @@ export default async function Home() {
   let error: string | null = null;
 
   try {
-    [rows, byBrand, byShop] = await Promise.all([
-      fetchPrices(),
-      fetchByBrand(),
-      fetchByShop(),
-    ]);
+    rows = await fetchPrices();
   } catch (e) {
     error = e instanceof Error ? e.message : "Unknown error";
   }
+
+  // These views may not exist yet if dbt hasn't been run — fail silently
+  try { byBrand = await fetchByBrand(); } catch { byBrand = []; }
+  try { byShop  = await fetchByShop();  } catch { byShop  = []; }
 
   const stats = scorecards(rows);
 
