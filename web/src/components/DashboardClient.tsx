@@ -8,6 +8,7 @@ import PriceTrendChart from "@/components/PriceTrendChart";
 import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
 import PriceScatterChart from "@/components/PriceScatterChart";
+import Price100mlChart from "@/components/Price100mlChart";
 import BrandDirectory from "@/components/BrandDirectory";
 import ShopDirectory from "@/components/ShopDirectory";
 
@@ -150,6 +151,7 @@ export default function DashboardClient({ rows, lastUpdated }: Props) {
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
+          <Price100mlChart rows={filtered} />
           <BrandDirectory activeBrands={activeBrands} />
           <ShopDirectory rows={filtered} />
           <PriceTable rows={filtered} />
