@@ -36,3 +36,6 @@ models:
         tests: [not_null]
       - name: avg_price_eur
         tests: [not_null]
+      - name: avg_price_per_100ml
+        description: "Average price per 100ml (EUR) — useful for comparing value across different bottle sizes."
+        tests: [not_null]

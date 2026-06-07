@@ -68,7 +68,8 @@ async function fetchPrices(): Promise<PriceRow[]> {
       CAST(shop_count AS INT64)            AS shop_count,
       ROUND(min_price_eur, 2)              AS min_price_eur,
       ROUND(max_price_eur, 2)              AS max_price_eur,
-      ROUND(avg_price_eur, 2)              AS avg_price_eur
+      ROUND(avg_price_eur, 2)              AS avg_price_eur,
+      ROUND(avg_price_per_100ml, 2)        AS avg_price_per_100ml
     FROM \`soy-sauce-tracker.datamart.datamart_price_comparison\`
     ORDER BY scrape_month ASC, avg_price_eur DESC
   `);

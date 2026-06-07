@@ -24,6 +24,10 @@ export default function PriceTable({ rows }: Props) {
   const minAvg = Math.min(...allAvg);
   const maxAvg = Math.max(...allAvg);
 
+  const all100ml = rows.map((r) => r.avg_price_per_100ml);
+  const min100ml = Math.min(...all100ml);
+  const max100ml = Math.max(...all100ml);
+
   const filtered = rows
     .filter((r) =>
       r.product_name.toLowerCase().includes(search.toLowerCase())
@@ -95,6 +99,7 @@ export default function PriceTable({ rows }: Props) {
               <Th col="min_price_eur" label="Min" right />
               <Th col="avg_price_eur" label="Avg" right />
               <Th col="max_price_eur" label="Max" right />
+              <Th col="avg_price_per_100ml" label="€/100ml" right />
             </tr>
           </thead>
           <tbody>
@@ -123,11 +128,14 @@ export default function PriceTable({ rows }: Props) {
                   {fmt(r.avg_price_eur)}
                 </td>
                 <td className="px-3 py-2 text-right text-stone-600">{fmt(r.max_price_eur)}</td>
+                <td className={`px-3 py-2 text-right text-xs font-semibold rounded ${heatColor(r.avg_price_per_100ml, min100ml, max100ml)}`}>
+                  {fmt(r.avg_price_per_100ml)}
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-stone-400 text-sm">
+                <td colSpan={10} className="px-3 py-8 text-center text-stone-400 text-sm">
                   No results for "{search}"
                 </td>
               </tr>

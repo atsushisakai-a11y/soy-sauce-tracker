@@ -34,6 +34,7 @@ SELECT
     )                                       AS shop_count,
     p.min_price_eur,
     p.max_price_eur,
-    p.avg_price_eur
+    p.avg_price_eur,
+    ROUND(p.avg_price_eur * 100.0 / NULLIF(p.volume_ml, 0), 2) AS avg_price_per_100ml
 
 FROM per_shop p
