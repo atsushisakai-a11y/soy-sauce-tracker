@@ -143,6 +143,9 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
         lastUpdated={lastUpdated}
       />
 
+      {/* Best Value charts — directly under KPIs */}
+      <Price100mlChart byBrand={byBrand} byShop={byShop} />
+
       {/* Charts + Directories + Table */}
       {filtered.length > 0 ? (
         <>
@@ -154,7 +157,6 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
-          <Price100mlChart byBrand={byBrand} byShop={byShop} />
           <BrandDirectory activeBrands={activeBrands} />
           <ShopDirectory rows={filtered} />
           <PriceTable rows={filtered} />
