@@ -94,7 +94,8 @@ CET = ZoneInfo("Europe/Amsterdam")
 def now_cet() -> str:
     """Current datetime in CET/CEST as a BigQuery DATETIME string."""
     return datetime.now(CET).strftime("%Y-%m-%d %H:%M:%S.%f")
-GEMINI_DAILY_LIMIT = int(os.getenv("GEMINI_DAILY_LIMIT", "50"))  # max AI calls per day
+GEMINI_DAILY_LIMIT  = int(os.getenv("GEMINI_DAILY_LIMIT",  "200"))  # max AI calls per day
+GEMINI_TURN_LIMIT   = int(os.getenv("GEMINI_TURN_LIMIT",   "10"))   # max turns per conversation
 
 # Simple in-memory daily counter (resets when bot restarts / at midnight)
 _gemini_usage: dict[date, int] = defaultdict(int)
@@ -257,6 +258,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_message = update.message.text or ""
     history: list = context.user_data.setdefault("history", [])
+    turn_count = context.user_data.get("turn_count", 0)
+
+    # Hard cap on turns per conversation
+    if turn_count >= GEMINI_TURN_LIMIT:
+        await update.message.reply_text(
+            "We've had quite the soy sauce journey together! 🫙\n"
+            "Let's wrap up — what's your *email address* so I can send you the report?",
+            parse_mode="Markdown",
+        )
+        return ASKING_EMAIL
 
     try:
         reply, ask_email_now = chat_with_gemini(history, user_message)
