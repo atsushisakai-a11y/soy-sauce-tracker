@@ -26,9 +26,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import brevo_python
-from brevo_python.api import transactional_emails_api
-from brevo_python.model.send_smtp_email import SendSmtpEmail
+from brevo.client import Brevo as BrevoClient
+from brevo.transactional_emails.types import (
+    SendTransacEmailRequestAttachmentItem,
+    SendTransacEmailRequestSender,
+    SendTransacEmailRequestToItem,
+)
 from google import genai
 from dotenv import load_dotenv
 from google.cloud import bigquery
@@ -400,23 +403,22 @@ async def send_report_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         pdf_b64 = base64.b64encode(PDF_PATH.read_bytes()).decode()
-        configuration = brevo_python.Configuration()
-        configuration.api_key["api-key"] = BREVO_API_KEY
-        with brevo_python.ApiClient(configuration) as api_client:
-            api = transactional_emails_api.TransactionalEmailsApi(api_client)
-            api.send_transac_email(SendSmtpEmail(
-                sender={"name": FROM_NAME, "email": FROM_EMAIL},
-                to=[{"email": email, "name": user.first_name or ""}],
-                subject="🫙 Your Exclusive European Soy Sauce Market Report",
-                html_content=f"""
-                <p>Hi {user.first_name or "there"},</p>
-                <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
-                <p>Track live prices at <a href="https://soy-sauce-tracker-s3eo.vercel.app">the tracker</a>.</p>
-                <p>To unsubscribe type <code>/delete</code> in Soy Bot on Telegram.</p>
-                <p><em>— {FROM_NAME}</em></p>
-                """,
-                attachment=[{"content": pdf_b64, "name": PDF_PATH.name}],
-            ))
+        brevo_client = BrevoClient(api_key=BREVO_API_KEY)
+        brevo_client.transactional_emails.send_transac_email(
+            sender=SendTransacEmailRequestSender(name=FROM_NAME, email=FROM_EMAIL),
+            to=[SendTransacEmailRequestToItem(email=email, name=user.first_name or "")],
+            subject="🫙 Your Exclusive European Soy Sauce Market Report",
+            html_content=f"""
+            <p>Hi {user.first_name or "there"},</p>
+            <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
+            <p>Track live prices at <a href="https://soy-sauce-tracker-s3eo.vercel.app">the tracker</a>.</p>
+            <p>To unsubscribe type <code>/delete</code> in Soy Bot on Telegram.</p>
+            <p><em>— {FROM_NAME}</em></p>
+            """,
+            attachment=[SendTransacEmailRequestAttachmentItem(
+                name=PDF_PATH.name, content=pdf_b64
+            )],
+        )
         await update.message.reply_text(
             f"✅ Report sent to *{email}*! Check your inbox. 🫙",
             parse_mode="Markdown",
