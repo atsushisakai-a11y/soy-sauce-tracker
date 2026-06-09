@@ -150,34 +150,38 @@ If information is missing for a dimension, score it 2 (below average — unknown
         return resp.choices[0].message.content.strip()
 
     def _extract_json(text: str) -> dict:
-        """Strip prose/fences and parse the first {...} block found."""
+        """Strip prose/fences, repair, and parse the first {...} block found.
+
+        Uses json-repair to fix common LLM JSON issues (missing commas,
+        unescaped quotes inside strings, trailing commas, etc.).
+        """
+        from json_repair import repair_json  # pip install json-repair
+
         # Remove markdown code fences
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
         text = text.strip()
-        # Extract from first { to last } to discard any trailing prose
+        # Extract from first { to last } to discard any surrounding prose
         start = text.find("{")
         end   = text.rfind("}") + 1
         if start == -1 or end == 0:
             raise ValueError(f"No JSON object found in response: {text[:200]}")
-        return json.loads(text[start:end])
+        blob = text[start:end]
+        # Try strict parse first; fall back to repair
+        try:
+            return json.loads(blob)
+        except json.JSONDecodeError as exc:
+            logger.warning("Strict JSON parse failed (%s) — applying json-repair", exc)
+            logger.debug("Raw blob: %s", blob[:500])
+            repaired = repair_json(blob, return_objects=True)
+            if isinstance(repaired, dict):
+                return repaired
+            raise ValueError(f"json-repair returned unexpected type {type(repaired)}: {repaired}")
 
-    # First attempt
     raw = _call_groq(extraction_prompt)
-    try:
-        data = _extract_json(raw)
-    except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning("JSON parse failed on first attempt (%s) — retrying with stricter prompt", exc)
-        strict_prompt = (
-            extraction_prompt
-            + "\n\nCRITICAL: Your previous response could not be parsed as JSON. "
-            "Return ONLY the raw JSON object — no markdown, no backticks, no explanation, "
-            "nothing before or after the opening { and closing }."
-        )
-        raw = _call_groq(strict_prompt)
-        data = _extract_json(raw)  # let this raise if still broken
+    data = _extract_json(raw)
 
     # ── Weighted score ────────────────────────────────────────────────────────
     scores = data["scores"]
