@@ -272,8 +272,8 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         reply, ask_email_now = chat_with_gemini(history, user_message)
     except Exception as exc:
-        logger.warning("Gemini error: %s", exc)
-        reply = "The soy sauce data streams are temporarily overloaded — try again in a moment! 🫙"
+        logger.error("Gemini error: %s", exc, exc_info=True)
+        reply = f"Gemini error: {exc}"
         ask_email_now = False
 
     # Store turn in history
