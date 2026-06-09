@@ -1,0 +1,61 @@
+name: 7. Score Leads - Propensity Model
+
+on:
+  # Run daily at 02:00 CET (01:00 UTC) — after new leads have been collected
+  schedule:
+    - cron: "0 1 * * *"
+  # Also allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      score_all:
+        description: "Re-score ALL active leads (not just unscored ones)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      dry_run:
+        description: "Dry-run: score but do not write back to BigQuery"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  score-leads:
+    name: Batch-score propensity to buy
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: bot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet groq google-cloud-bigquery python-dotenv
+
+      - name: Run propensity scorer
+        env:
+          GROQ_API_KEY:              ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_CREDENTIALS_JSON:   ${{ secrets.GCP_SA_KEY }}
+          BQ_PROJECT:                soy-sauce-tracker
+          BQ_DATASET:                raw
+          BQ_TABLE:                  raw_telegram_leads
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.score_all }}" = "true" ]; then
+            ARGS="$ARGS --all"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python score_leads.py $ARGS

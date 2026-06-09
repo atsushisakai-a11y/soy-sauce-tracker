@@ -176,6 +176,7 @@ def save_lead(
     reason: str,
     ai_reply: str,
     email: str,
+    conversation_json: str | None = None,
     fav_brand: str | None = None,
     dishes: str | None = None,
     origin_country: str | None = None,
@@ -190,6 +191,7 @@ def save_lead(
         "reason": reason,
         "ai_reply": ai_reply,
         "email": email,
+        "conversation_json": conversation_json,
         "fav_brand": fav_brand,
         "dishes": dishes,
         "origin_country": origin_country,
@@ -334,6 +336,7 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user_turns = [t["text"] for t in history if t["role"] == "user"]
     reason   = " / ".join(user_turns[:3]) if user_turns else ""
     ai_reply = history[-1]["text"] if history else ""
+    conversation_json = json.dumps(history) if history else None
 
     # ── Score the conversation ──────────────────────────────────────────────
     fav_brand = dishes = origin_country = market_outlook = None
@@ -358,6 +361,7 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             reason=reason,
             ai_reply=ai_reply,
             email=email,
+            conversation_json=conversation_json,
             fav_brand=fav_brand,
             dishes=dishes,
             origin_country=origin_country,

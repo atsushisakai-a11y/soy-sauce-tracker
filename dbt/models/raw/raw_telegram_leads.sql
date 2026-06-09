@@ -14,8 +14,9 @@ CREATE TABLE IF NOT EXISTS `soy-sauce-tracker.raw.raw_telegram_leads` (
   email              STRING,
 
   -- ── Conversation answers ──────────────────────────────────────────────────
-  reason             STRING,   -- summary of why user is interested
+  reason             STRING,   -- summary of why user is interested (first 3 turns)
   ai_reply           STRING,   -- last bot message in conversation
+  conversation_json  STRING,   -- full [{role, text}] history as JSON
   fav_brand          STRING,   -- Q2: favourite soy sauce brand
   dishes             STRING,   -- Q3: dishes cooked with soy sauce
   origin_country     STRING,   -- Q4: user's country of origin
@@ -38,9 +39,14 @@ OPTIONS (
 -- Run this if the table already exists without the new columns.
 -- Executed: 2026-06-09
 ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
-  ADD COLUMN IF NOT EXISTS fav_brand        STRING,
-  ADD COLUMN IF NOT EXISTS dishes           STRING,
-  ADD COLUMN IF NOT EXISTS origin_country   STRING,
-  ADD COLUMN IF NOT EXISTS market_outlook   STRING,
-  ADD COLUMN IF NOT EXISTS propensity_score FLOAT64,
-  ADD COLUMN IF NOT EXISTS score_breakdown  STRING;
+  ADD COLUMN IF NOT EXISTS fav_brand           STRING,
+  ADD COLUMN IF NOT EXISTS dishes              STRING,
+  ADD COLUMN IF NOT EXISTS origin_country      STRING,
+  ADD COLUMN IF NOT EXISTS market_outlook      STRING,
+  ADD COLUMN IF NOT EXISTS propensity_score    FLOAT64,
+  ADD COLUMN IF NOT EXISTS score_breakdown     STRING;
+
+-- ── ALTER TABLE: add conversation_json column ────────────────────────────────
+-- Executed: 2026-06-09
+ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
+  ADD COLUMN IF NOT EXISTS conversation_json   STRING;
