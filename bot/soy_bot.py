@@ -22,6 +22,7 @@ import re
 import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from google import genai
 from dotenv import load_dotenv
@@ -55,6 +56,12 @@ BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 GEMINI_MODEL = "gemini-1.5-flash"
+CET = ZoneInfo("Europe/Amsterdam")
+
+
+def now_cet() -> str:
+    """Current datetime in CET/CEST as a BigQuery DATETIME string."""
+    return datetime.now(CET).strftime("%Y-%m-%d %H:%M:%S.%f")
 GEMINI_DAILY_LIMIT = int(os.getenv("GEMINI_DAILY_LIMIT", "50"))  # max AI calls per day
 
 # Simple in-memory daily counter (resets when bot restarts / at midnight)
@@ -127,7 +134,7 @@ def save_lead(
         "reason": reason,
         "ai_reply": ai_reply,
         "email": email,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_cet(),
         "deleted_at": None,
     }
     errors = bq.insert_rows_json(BQ_TABLE_FULL, [row])
@@ -168,7 +175,7 @@ def soft_delete_lead(
     deleted_at set; queries treat the latest row per user as the truth.
     """
     email = lookup_email(telegram_user_id)
-    now = datetime.now(timezone.utc).isoformat()
+    now = now_cet()
     row = {
         "telegram_user_id": telegram_user_id,
         "first_name": first_name,

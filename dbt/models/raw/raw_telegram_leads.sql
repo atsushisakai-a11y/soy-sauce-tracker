@@ -7,14 +7,14 @@
 -- Table   : raw_telegram_leads
 
 CREATE TABLE IF NOT EXISTS `soy-sauce-tracker.raw.raw_telegram_leads` (
-  telegram_user_id   INT64     NOT NULL,
+  telegram_user_id   INT64    NOT NULL,
   first_name         STRING,
   username           STRING,
   reason             STRING,
   ai_reply           STRING,
   email              STRING,
-  created_at         TIMESTAMP NOT NULL,
-  deleted_at         TIMESTAMP
+  created_at         DATETIME NOT NULL,
+  deleted_at         DATETIME
 )
 OPTIONS (
   description = "Telegram lead sign-ups collected by Soy Bot",
