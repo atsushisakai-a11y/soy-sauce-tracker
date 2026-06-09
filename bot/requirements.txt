@@ -3,3 +3,4 @@ google-genai>=1.0.0
 google-cloud-bigquery>=3.0.0
 python-dotenv>=1.0.0
 brevo-python>=3.0.0
+reportlab>=4.0.0
