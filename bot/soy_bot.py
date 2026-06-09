@@ -63,7 +63,7 @@ BQ_DATASET = os.getenv("BQ_DATASET", "raw")
 BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
-GEMINI_MODEL   = "gemini-1.5-flash"
+GEMINI_MODEL   = "gemini-2.0-flash"
 GEMINI_SYSTEM_PROMPT = """You are Soy Bot, a quirky and enthusiastic specialist of the \
 European soy sauce market. Your personality is warm, witty, and genuinely funny — \
 think of a passionate sommelier who takes soy sauce far too seriously.
