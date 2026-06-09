@@ -137,22 +137,27 @@ def save_lead(
 
 
 # ── Helper: BigQuery soft-delete ──────────────────────────────────────────────
-def soft_delete_lead(telegram_user_id: int) -> int:
-    """Marks all active rows for this user as deleted. Returns number of rows affected."""
-    query = f"""
-        UPDATE `{BQ_TABLE_FULL}`
-        SET    deleted_at = CURRENT_TIMESTAMP()
-        WHERE  telegram_user_id = @uid
-          AND  deleted_at IS NULL
+def soft_delete_lead(telegram_user_id: int) -> None:
+    """Inserts a deletion-marker row for this user.
+
+    BigQuery streaming inserts cannot be updated/deleted until they leave
+    the streaming buffer (~90 min). Instead we insert a marker row with
+    deleted_at set; queries treat the latest row per user as the truth.
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("uid", "INT64", telegram_user_id)
-        ]
-    )
-    job = bq.query(query, job_config=job_config)
-    job.result()  # wait for completion
-    return job.num_dml_affected_rows or 0
+    row = {
+        "telegram_user_id": telegram_user_id,
+        "first_name": None,
+        "username": None,
+        "reason": None,
+        "ai_reply": None,
+        "email": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    errors = bq.insert_rows_json(BQ_TABLE_FULL, [row])
+    if errors:
+        raise RuntimeError(f"BigQuery insert errors: {errors}")
+    logger.info("Inserted deletion marker for telegram_user_id=%s", telegram_user_id)
 
 
 # ── /start ────────────────────────────────────────────────────────────────────
@@ -269,7 +274,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def delete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     try:
-        rows_deleted = soft_delete_lead(user.id)
+        soft_delete_lead(user.id)
     except Exception as exc:
         logger.error("Failed to delete lead for user %s: %s", user.id, exc, exc_info=True)
         await update.message.reply_text(
@@ -278,18 +283,11 @@ async def delete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    if rows_deleted > 0:
-        await update.message.reply_text(
-            "✅ Done — your registration has been removed from our database.\n\n"
-            "If you ever want to sign up again, just type /start. "
-            "No hard feelings, soy sauce is a complicated world. 🫙"
-        )
-    else:
-        await update.message.reply_text(
-            "Hmm, I couldn't find an active registration for your account. "
-            "Maybe you never signed up, or already deleted it? 🤔\n\n"
-            "Type /start to register."
-        )
+    await update.message.reply_text(
+        "✅ Done — your registration has been removed from our database.\n\n"
+        "If you ever want to sign up again, just type /start. "
+        "No hard feelings, soy sauce is a complicated world. 🫙"
+    )
 
 
 # ── /help ─────────────────────────────────────────────────────────────────────
