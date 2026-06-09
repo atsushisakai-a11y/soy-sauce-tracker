@@ -7,8 +7,8 @@ Usage:
 
 Requirements:
     - BREVO_API_KEY in .env
-    - REPORT_FROM_EMAIL in .env  (e.g. atsushi_sakai1208@hotmail.com)
-    - REPORT_FROM_NAME in .env   (e.g. Soy Sauce Bot)
+    - REPORT_FROM_EMAIL in .env  (e.g. "Soy Sauce Bot <atsushi_sakai1208@hotmail.com>")
+    - REPORT_FROM_NAME in .env   (e.g. "Soy Sauce Bot")
     - Active subscribers in BigQuery raw.raw_telegram_leads
 """
 
@@ -21,9 +21,12 @@ import sys
 from email.utils import parseaddr
 from pathlib import Path
 
-import brevo_python
-from brevo_python.api import transactional_emails_api
-from brevo_python.model.send_smtp_email import SendSmtpEmail
+from brevo.client import Brevo
+from brevo.transactional_emails.types import (
+    SendTransacEmailRequestAttachmentItem,
+    SendTransacEmailRequestSender,
+    SendTransacEmailRequestToItem,
+)
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -38,17 +41,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
-BQ_PROJECT     = os.getenv("BQ_PROJECT", "soy-sauce-tracker")
-BQ_TABLE_FULL  = f"{BQ_PROJECT}.raw.raw_telegram_leads"
+BREVO_API_KEY = os.environ["BREVO_API_KEY"]
+BQ_PROJECT    = os.getenv("BQ_PROJECT", "soy-sauce-tracker")
+BQ_TABLE_FULL = f"{BQ_PROJECT}.raw.raw_telegram_leads"
 
 # Parse "Soy Sauce Bot <email@example.com>" or plain "email@example.com"
-_from_raw      = os.environ["REPORT_FROM_EMAIL"]
+_from_raw  = os.environ["REPORT_FROM_EMAIL"]
 FROM_NAME, FROM_EMAIL = parseaddr(_from_raw)
 if not FROM_EMAIL:
     FROM_EMAIL = _from_raw
 if not FROM_NAME:
-    FROM_NAME  = os.getenv("REPORT_FROM_NAME", "Soy Sauce Bot")
+    FROM_NAME = os.getenv("REPORT_FROM_NAME", "Soy Sauce Bot")
 
 # ── BigQuery client ───────────────────────────────────────────────────────────
 _gcp_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
@@ -61,10 +64,12 @@ if _gcp_json:
 else:
     bq = bigquery.Client(project=BQ_PROJECT)
 
+# ── Brevo client ──────────────────────────────────────────────────────────────
+brevo = Brevo(api_key=BREVO_API_KEY)
+
 
 # ── Fetch active subscribers ──────────────────────────────────────────────────
 def get_active_subscribers() -> list[dict]:
-    """Return list of {first_name, email} for active (non-deleted) subscribers."""
     query = f"""
         SELECT first_name, email
         FROM (
@@ -85,49 +90,36 @@ def get_active_subscribers() -> list[dict]:
 
 # ── Send one email ────────────────────────────────────────────────────────────
 def send_report_email(first_name: str, email: str, pdf_path: Path) -> None:
-    pdf_bytes   = pdf_path.read_bytes()
-    pdf_b64     = base64.b64encode(pdf_bytes).decode()
+    pdf_b64 = base64.b64encode(pdf_path.read_bytes()).decode()
 
-    configuration = brevo_python.Configuration()
-    configuration.api_key["api-key"] = BREVO_API_KEY
-
-    with brevo_python.ApiClient(configuration) as api_client:
-        api = transactional_emails_api.TransactionalEmailsApi(api_client)
-
-        email_obj = SendSmtpEmail(
-            sender={"name": FROM_NAME, "email": FROM_EMAIL},
-            to=[{"email": email, "name": first_name}],
-            subject="🫙 Your Exclusive European Soy Sauce Market Report",
-            html_content=f"""
-            <p>Hi {first_name},</p>
-
-            <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
-
-            <p>Inside you'll find:</p>
-            <ul>
-                <li>Monthly price trends across 10+ European shops</li>
-                <li>Brand-level comparisons</li>
-                <li>Country-by-country breakdowns</li>
-            </ul>
-
-            <p>
-                You can also track live prices at
-                <a href="https://kikkoman-price-tracker.vercel.app">the price tracker</a>.
-            </p>
-
-            <p>
-                To unsubscribe, open Soy Bot on Telegram and type <code>/delete</code>.
-            </p>
-
-            <p>May your soy sauce always be perfectly priced. 🫙</p>
-            <p><em>— {FROM_NAME}</em></p>
-            """,
-            attachment=[{
-                "content": pdf_b64,
-                "name": pdf_path.name,
-            }],
-        )
-        api.send_transac_email(email_obj)
+    brevo.transactional_emails.send_transac_email(
+        sender=SendTransacEmailRequestSender(name=FROM_NAME, email=FROM_EMAIL),
+        to=[SendTransacEmailRequestToItem(email=email, name=first_name)],
+        subject="🫙 Your Exclusive European Soy Sauce Market Report",
+        html_content=f"""
+        <p>Hi {first_name},</p>
+        <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
+        <p>Inside you'll find:</p>
+        <ul>
+            <li>Monthly price trends across 10+ European shops</li>
+            <li>Brand-level comparisons</li>
+            <li>Country-by-country breakdowns</li>
+        </ul>
+        <p>
+            You can also track live prices at
+            <a href="https://kikkoman-price-tracker.vercel.app">the price tracker</a>.
+        </p>
+        <p>To unsubscribe, open Soy Bot on Telegram and type <code>/delete</code>.</p>
+        <p>May your soy sauce always be perfectly priced. 🫙</p>
+        <p><em>— {FROM_NAME}</em></p>
+        """,
+        attachment=[
+            SendTransacEmailRequestAttachmentItem(
+                name=pdf_path.name,
+                content=pdf_b64,
+            )
+        ],
+    )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
