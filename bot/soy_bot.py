@@ -137,22 +137,27 @@ def save_lead(
 
 
 # ── Helper: BigQuery soft-delete ──────────────────────────────────────────────
-def soft_delete_lead(telegram_user_id: int) -> None:
+def soft_delete_lead(
+    telegram_user_id: int,
+    first_name: str | None = None,
+    username: str | None = None,
+) -> None:
     """Inserts a deletion-marker row for this user.
 
     BigQuery streaming inserts cannot be updated/deleted until they leave
     the streaming buffer (~90 min). Instead we insert a marker row with
     deleted_at set; queries treat the latest row per user as the truth.
     """
+    now = datetime.now(timezone.utc).isoformat()
     row = {
         "telegram_user_id": telegram_user_id,
-        "first_name": None,
-        "username": None,
+        "first_name": first_name,
+        "username": username,
         "reason": None,
         "ai_reply": None,
         "email": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now,
+        "deleted_at": now,
     }
     errors = bq.insert_rows_json(BQ_TABLE_FULL, [row])
     if errors:
@@ -274,7 +279,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def delete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     try:
-        soft_delete_lead(user.id)
+        soft_delete_lead(user.id, first_name=user.first_name, username=user.username)
     except Exception as exc:
         logger.error("Failed to delete lead for user %s: %s", user.id, exc, exc_info=True)
         await update.message.reply_text(
