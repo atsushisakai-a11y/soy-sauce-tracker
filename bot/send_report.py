@@ -133,12 +133,13 @@ def main() -> None:
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
-    if not pdf_path.exists():
-        logger.error("PDF not found: %s", pdf_path)
-        sys.exit(1)
-    if pdf_path.suffix.lower() != ".pdf":
-        logger.error("File must be a .pdf: %s", pdf_path)
-        sys.exit(1)
+    if not args.dry_run:
+        if not pdf_path.exists():
+            logger.error("PDF not found: %s", pdf_path)
+            sys.exit(1)
+        if pdf_path.suffix.lower() != ".pdf":
+            logger.error("File must be a .pdf: %s", pdf_path)
+            sys.exit(1)
 
     logger.info("Sender: %s <%s>", FROM_NAME, FROM_EMAIL)
 
