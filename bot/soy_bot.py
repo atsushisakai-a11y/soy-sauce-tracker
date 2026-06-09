@@ -276,8 +276,8 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         ask_email_now = False
 
     # Store turn in history
-    history.append({"role": "user",  "text": user_message})
-    history.append({"role": "model", "text": reply})
+    history.append({"role": "user",      "text": user_message})
+    history.append({"role": "assistant", "text": reply})
     context.user_data["turn_count"] = context.user_data.get("turn_count", 0) + 1
 
     await update.message.reply_text(reply)
