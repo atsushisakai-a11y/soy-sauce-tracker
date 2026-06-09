@@ -32,13 +32,15 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
-# scoring_model.py lives in the same directory
+# scoring_model.py lives in ../bot/
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bot"))
 from scoring_model import ScoringResult, score_conversation
 
 load_dotenv()

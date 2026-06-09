@@ -31,7 +31,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: bot
+        working-directory: score
 
     steps:
       - uses: actions/checkout@v4
