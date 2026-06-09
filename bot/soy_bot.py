@@ -32,7 +32,7 @@ from brevo.transactional_emails.types import (
     SendTransacEmailRequestSender,
     SendTransacEmailRequestToItem,
 )
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -57,13 +57,13 @@ logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GROQ_API_KEY   = os.environ["GROQ_API_KEY"]
 BQ_PROJECT = os.getenv("BQ_PROJECT", "soy-sauce-tracker")
 BQ_DATASET = os.getenv("BQ_DATASET", "raw")
 BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
-GEMINI_MODEL   = "gemini-2.0-flash"
+GROQ_MODEL     = "llama-3.3-70b-versatile"
 GEMINI_SYSTEM_PROMPT = """You are Soy Bot, a quirky and enthusiastic specialist of the \
 European soy sauce market. Your personality is warm, witty, and genuinely funny — \
 think of a passionate sommelier who takes soy sauce far too seriously.
@@ -94,17 +94,17 @@ CET = ZoneInfo("Europe/Amsterdam")
 def now_cet() -> str:
     """Current datetime in CET/CEST as a BigQuery DATETIME string."""
     return datetime.now(CET).strftime("%Y-%m-%d %H:%M:%S.%f")
-GEMINI_DAILY_LIMIT  = int(os.getenv("GEMINI_DAILY_LIMIT",  "200"))  # max AI calls per day
-GEMINI_TURN_LIMIT   = int(os.getenv("GEMINI_TURN_LIMIT",   "10"))   # max turns per conversation
+GROQ_DAILY_LIMIT  = int(os.getenv("GROQ_DAILY_LIMIT",  "200"))  # max AI calls per day
+GROQ_TURN_LIMIT   = int(os.getenv("GROQ_TURN_LIMIT",   "10"))   # max turns per conversation
 
 # Simple in-memory daily counter (resets when bot restarts / at midnight)
-_gemini_usage: dict[date, int] = defaultdict(int)
+_groq_usage: dict[date, int] = defaultdict(int)
 
 # ConversationHandler states
 CHATTING, ASKING_EMAIL, CONFIRMING_DELETE_EMAIL = range(3)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-gemini = genai.Client(api_key=GEMINI_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 GEMINI_SYSTEM_PROMPT = (
     "You are Soy Bot, a quirky and enthusiastic specialist of the European soy sauce market. "
@@ -128,34 +128,33 @@ else:
     logger.info("BigQuery: using Application Default Credentials")
 
 
-# ── Helper: Gemini multi-turn chat ───────────────────────────────────────────
-def chat_with_gemini(history: list[dict], user_message: str) -> tuple[str, bool]:
-    """Send a message to Gemini with full conversation history.
+# ── Helper: Groq multi-turn chat ─────────────────────────────────────────────
+def chat_with_groq(history: list[dict], user_message: str) -> tuple[str, bool]:
+    """Send a message to Groq with full conversation history.
 
     Returns (reply_text, ask_email_now).
-    ask_email_now is True when Gemini included [ASK_EMAIL] in its reply.
+    ask_email_now is True when the model included [ASK_EMAIL] in its reply.
     """
     today = date.today()
-    if _gemini_usage[today] >= GEMINI_DAILY_LIMIT:
-        logger.warning("Gemini daily limit (%d) reached", GEMINI_DAILY_LIMIT)
-        return ("The soy sauce market is so exciting I've momentarily overloaded! "
+    if _groq_usage[today] >= GROQ_DAILY_LIMIT:
+        logger.warning("Groq daily limit (%d) reached", GROQ_DAILY_LIMIT)
+        return ("The soy sauce data streams are temporarily overloaded! "
                 "Try again in a bit. 🫙", False)
 
-    # Build contents list from history + new message
-    contents = []
+    messages = [{"role": "system", "content": GEMINI_SYSTEM_PROMPT}]
     for turn in history:
-        contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
-    contents.append({"role": "user", "parts": [{"text": user_message}]})
+        messages.append({"role": turn["role"], "content": turn["text"]})
+    messages.append({"role": "user", "content": user_message})
 
-    response = gemini.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=contents,
-        config=genai.types.GenerateContentConfig(system_instruction=GEMINI_SYSTEM_PROMPT),
+    response = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=messages,
+        max_tokens=300,
     )
-    _gemini_usage[today] += 1
-    logger.info("Gemini usage today: %d/%d", _gemini_usage[today], GEMINI_DAILY_LIMIT)
+    _groq_usage[today] += 1
+    logger.info("Groq usage today: %d/%d", _groq_usage[today], GROQ_DAILY_LIMIT)
 
-    reply = response.text.strip()
+    reply = response.choices[0].message.content.strip()
     ask_email = "[ASK_EMAIL]" in reply
     reply = reply.replace("[ASK_EMAIL]", "").strip()
     return reply, ask_email
@@ -261,7 +260,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     turn_count = context.user_data.get("turn_count", 0)
 
     # Hard cap on turns per conversation
-    if turn_count >= GEMINI_TURN_LIMIT:
+    if turn_count >= GROQ_TURN_LIMIT:
         await update.message.reply_text(
             "We've had quite the soy sauce journey together! 🫙\n"
             "Let's wrap up — what's your *email address* so I can send you the report?",
@@ -270,7 +269,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return ASKING_EMAIL
 
     try:
-        reply, ask_email_now = chat_with_gemini(history, user_message)
+        reply, ask_email_now = chat_with_groq(history, user_message)
     except Exception as exc:
         logger.error("Gemini error: %s", exc, exc_info=True)
         reply = f"Gemini error: {exc}"
