@@ -271,10 +271,10 @@ async def delete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         rows_deleted = soft_delete_lead(user.id)
     except Exception as exc:
-        logger.error("Failed to delete lead for user %s: %s", user.id, exc)
+        logger.error("Failed to delete lead for user %s: %s", user.id, exc, exc_info=True)
         await update.message.reply_text(
-            "Something went wrong while trying to delete your data. "
-            "Please try again later. 😔"
+            f"Something went wrong while trying to delete your data. 😔\n\nError: `{exc}`",
+            parse_mode="Markdown",
         )
         return
 
