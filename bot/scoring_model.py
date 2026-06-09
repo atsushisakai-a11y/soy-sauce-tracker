@@ -140,23 +140,44 @@ Scoring guide (1 = very low, 5 = very high):
 
 If information is missing for a dimension, score it 2 (below average — unknown = uncertain)."""
 
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": extraction_prompt}],
-        max_tokens=700,
-        temperature=0.1,
-    )
+    def _call_groq(prompt: str) -> str:
+        resp = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=700,
+            temperature=0.1,
+        )
+        return resp.choices[0].message.content.strip()
 
-    raw = response.choices[0].message.content.strip()
+    def _extract_json(text: str) -> dict:
+        """Strip prose/fences and parse the first {...} block found."""
+        # Remove markdown code fences
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        text = text.strip()
+        # Extract from first { to last } to discard any trailing prose
+        start = text.find("{")
+        end   = text.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError(f"No JSON object found in response: {text[:200]}")
+        return json.loads(text[start:end])
 
-    # Strip markdown code fences if present
-    if "```" in raw:
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    data = json.loads(raw)
+    # First attempt
+    raw = _call_groq(extraction_prompt)
+    try:
+        data = _extract_json(raw)
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("JSON parse failed on first attempt (%s) — retrying with stricter prompt", exc)
+        strict_prompt = (
+            extraction_prompt
+            + "\n\nCRITICAL: Your previous response could not be parsed as JSON. "
+            "Return ONLY the raw JSON object — no markdown, no backticks, no explanation, "
+            "nothing before or after the opening { and closing }."
+        )
+        raw = _call_groq(strict_prompt)
+        data = _extract_json(raw)  # let this raise if still broken
 
     # ── Weighted score ────────────────────────────────────────────────────────
     scores = data["scores"]
