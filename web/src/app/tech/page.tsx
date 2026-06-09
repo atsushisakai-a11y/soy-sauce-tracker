@@ -50,9 +50,26 @@ const stack: StackCard[] = [
     name: "GitHub Actions",
     role: "Orchestration & CI/CD",
     description:
-      "Five numbered workflows run in sequence: 1. Scrape → 2. Image Similarity → 3. dbt Staging → 4. dbt DWH → 5. dbt Datamart. Each step sends a Telegram completion notification. HuggingFace model weights are cached across runs to avoid rate limits.",
-    badges: ["5 workflows", "Telegram alerts", "HuggingFace cache", "GCP secrets"],
+      "Seven numbered workflows run in sequence: 1. Scrape → 2. Image Similarity → 3–5. dbt layers → 6. dbt Docs → 7. Score Leads (propensity model). Each step sends a Telegram completion notification. HuggingFace model weights are cached across runs to avoid rate limits.",
+    badges: ["7 workflows", "Telegram alerts", "HuggingFace cache", "GCP secrets"],
     link: `${GITHUB_URL}/actions`,
+  },
+  {
+    icon: "🫙",
+    name: "Telegram Soy Bot + Groq",
+    role: "Lead capture & AI conversation",
+    description:
+      "A Telegram bot (python-telegram-bot v20) that holds a free-flowing multi-turn conversation powered by Groq's llama-3.3-70b-versatile model (free tier, 14,400 req/day). The bot naturally guides users through five topics — motivation, favourite brand, dishes, origin country, and market outlook — before asking for their email. All answers are stored in BigQuery. Hosted on Railway with auto-deploy from GitHub.",
+    badges: ["python-telegram-bot", "Groq LLM", "llama-3.3-70b", "Railway", "BigQuery"],
+  },
+  {
+    icon: "📊",
+    name: "Python — Propensity Model",
+    role: "Lead scoring",
+    description:
+      "A Groq-powered scoring model that reads the full conversation history and extracts five structured dimensions (1–5 each): soy engagement (30%), cooking frequency (25%), brand awareness (20%), market sentiment (15%), and cultural affinity (10%). The weighted average is normalised to 0–100. Runs in real-time when a user submits their email, with a nightly GitHub Actions batch job as a safety net for any missed scores.",
+    badges: ["Groq LLM", "Weighted scoring", "json-repair", "GitHub Actions", "0–100 scale"],
+    link: `${GITHUB_URL}/blob/main/bot/scoring_model.py`,
   },
   {
     icon: "🤖",
@@ -80,6 +97,8 @@ const pipeline = [
   { step: "3", label: "dbt Staging", detail: "Normalise + join", color: "bg-blue-100 text-blue-700 border-blue-200" },
   { step: "4", label: "dbt DWH", detail: "SCD Type 2", color: "bg-teal-100 text-teal-700 border-teal-200" },
   { step: "5", label: "dbt Datamart", detail: "Monthly agg", color: "bg-green-100 text-green-700 border-green-200" },
+  { step: "6", label: "dbt Docs", detail: "GitHub Pages", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+  { step: "7", label: "Score Leads", detail: "Propensity model", color: "bg-rose-100 text-rose-700 border-rose-200" },
   { step: "→", label: "Dashboard", detail: "Next.js + Recharts", color: "bg-amber-100 text-amber-700 border-amber-200" },
 ];
 
@@ -190,8 +209,122 @@ export default function TechPage() {
             ))}
           </div>
           <p className="text-center text-xs text-stone-400 mt-3">
-            Orchestrated by <strong>GitHub Actions</strong> · runs monthly · Telegram alerts on completion
+            Orchestrated by <strong>GitHub Actions</strong> · steps 1–5 run monthly · step 7 runs nightly · Telegram alerts on completion
           </p>
+        </section>
+
+        {/* Propensity model explainer */}
+        <section className="space-y-6">
+          <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest text-center">
+            Step 7 — Propensity-to-Buy Model
+          </h3>
+
+          {/* How it works */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <h4 className="font-semibold text-stone-900">How it works</h4>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              When a user finishes the Telegram conversation and submits their email, a second Groq
+              LLM call reads the full chat history and returns a structured JSON object with five
+              dimension scores (1–5). A weighted average is then normalised to a 0–100 propensity
+              score. A nightly GitHub Actions job re-scores any leads the real-time scorer missed.
+            </p>
+
+            {/* Dimensions table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-stone-100">
+                    <th className="text-left py-2 pr-4 text-stone-500 font-medium">Dimension</th>
+                    <th className="text-left py-2 pr-4 text-stone-500 font-medium">Weight</th>
+                    <th className="text-left py-2 text-stone-500 font-medium">What it measures</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {[
+                    ["Soy engagement",    "30%", "Passion & knowledge about soy sauce"],
+                    ["Cooking frequency", "25%", "Actively cooks dishes that need soy sauce"],
+                    ["Brand awareness",   "20%", "Knows brands, has specific preferences"],
+                    ["Market sentiment",  "15%", "Optimistic about European soy sauce market growth"],
+                    ["Cultural affinity", "10%", "Background with soy sauce culinary tradition"],
+                  ].map(([dim, weight, desc]) => (
+                    <tr key={dim}>
+                      <td className="py-2 pr-4 font-medium text-stone-800">{dim}</td>
+                      <td className="py-2 pr-4">
+                        <span className="bg-rose-100 text-rose-700 text-xs font-semibold px-2 py-0.5 rounded-md">{weight}</span>
+                      </td>
+                      <td className="py-2 text-stone-500">{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Formula */}
+            <div className="bg-stone-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Scoring formula</p>
+              <p className="text-sm font-mono text-stone-700">
+                raw = (0.30 × soy) + (0.25 × cooking) + (0.20 × brand) + (0.15 × market) + (0.10 × culture)
+              </p>
+              <p className="text-sm font-mono text-stone-700">
+                propensity_score = (raw − 1) / 4 × 100
+              </p>
+              <p className="text-xs text-stone-400 mt-1">
+                Normalises [1, 5] → [0, 100]. Unknown answers default to 2 (below average — uncertain, not worst-case).
+              </p>
+            </div>
+          </div>
+
+          {/* Real example */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-stone-900">Real example — first scored lead</h4>
+              <span className="text-2xl font-bold text-rose-600">62.5 / 100</span>
+            </div>
+            <p className="text-xs text-stone-400">
+              Conversation ended early (bot restarted mid-session), so cooking frequency and market
+              sentiment were never answered — both defaulted to 2/5.
+            </p>
+
+            <div className="space-y-2">
+              {[
+                { dim: "Soy engagement",    score: 4, weight: "30%", reason: "Expressed love for soy sauce", calc: "0.30 × 4 = 1.20" },
+                { dim: "Cooking frequency", score: 2, weight: "25%", reason: "No information provided", calc: "0.25 × 2 = 0.50" },
+                { dim: "Brand awareness",   score: 5, weight: "20%", reason: "Specifically named Kikkoman", calc: "0.20 × 5 = 1.00" },
+                { dim: "Market sentiment",  score: 2, weight: "15%", reason: "No information provided", calc: "0.15 × 2 = 0.30" },
+                { dim: "Cultural affinity", score: 5, weight: "10%", reason: "Japanese background", calc: "0.10 × 5 = 0.50" },
+              ].map((row) => (
+                <div key={row.dim} className="flex items-center gap-3">
+                  <div className="w-36 shrink-0">
+                    <span className="text-xs font-medium text-stone-700">{row.dim}</span>
+                  </div>
+                  {/* Bar */}
+                  <div className="flex gap-0.5">
+                    {[1,2,3,4,5].map((i) => (
+                      <div
+                        key={i}
+                        className={`w-4 h-4 rounded-sm ${i <= row.score ? "bg-rose-400" : "bg-stone-100"}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs text-stone-500 w-6 shrink-0">{row.score}/5</span>
+                  <span className="text-xs text-stone-400 hidden sm:block shrink-0">{row.weight} →</span>
+                  <span className="text-xs font-mono text-stone-600 hidden sm:block shrink-0">{row.calc}</span>
+                  <span className="text-xs text-stone-400 truncate">{row.reason}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-stone-50 rounded-xl p-4 text-sm font-mono text-stone-700 space-y-1">
+              <p>raw = 1.20 + 0.50 + 1.00 + 0.30 + 0.50 = <strong>3.50</strong></p>
+              <p>score = (3.50 − 1) / 4 × 100 = <strong className="text-rose-600">62.5</strong></p>
+            </div>
+
+            <p className="text-xs text-stone-400">
+              If cooking frequency and market sentiment had been answered (e.g. both 4/5), the score
+              would rise to approximately <strong>78.8</strong> — illustrating the model&apos;s sensitivity
+              to conversation completeness.
+            </p>
+          </div>
         </section>
 
         {/* Stack cards */}
