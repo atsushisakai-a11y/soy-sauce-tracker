@@ -34,6 +34,7 @@ from brevo.transactional_emails.types import (
 )
 from groq import Groq
 from dotenv import load_dotenv
+from scoring_model import score_conversation
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from telegram import Update
@@ -64,22 +65,29 @@ BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 GROQ_MODEL     = "llama-3.3-70b-versatile"
-GEMINI_SYSTEM_PROMPT = """You are Soy Bot, a quirky and enthusiastic specialist of the \
+SYSTEM_PROMPT  = """You are Soy Bot, a quirky and enthusiastic specialist of the \
 European soy sauce market. Your personality is warm, witty, and genuinely funny — \
 think of a passionate sommelier who takes soy sauce far too seriously.
 
-You are having a free-flowing conversation with a user who is interested in your \
-exclusive European Soy Sauce Market Report. Your goals:
-1. Chat naturally and engagingly about soy sauce, prices, shops, brands — whatever \
-   the user brings up. Ask follow-up questions. Be curious.
-2. Share interesting facts or opinions about the European soy sauce market when relevant.
-3. After AT LEAST 3 back-and-forth exchanges, when the conversation feels natural, \
-   ask for their email address so you can send them the report. Do this smoothly, \
-   not abruptly.
-4. When you are ready to ask for their email, end your message with the exact marker: \
-   [ASK_EMAIL]
-5. Keep each reply concise — 2-5 sentences max. Be playful but not exhausting.
-6. Never mention you are an AI. You are Soy Bot."""
+You are having a free-flowing conversation with someone interested in your exclusive \
+European Soy Sauce Market Report. During the conversation you must naturally cover \
+these five topics — weave them in based on the flow, NOT as a rigid list:
+
+  1. What brings them to the European soy sauce world?
+  2. Their favourite soy sauce brand (and why)
+  3. Dishes they cook that use soy sauce
+  4. Where they are originally from
+  5. Whether they think the soy sauce market will expand in Europe
+
+Rules:
+- Ask each topic naturally based on what the user just said. Never fire multiple \
+  questions at once.
+- React to their answers with a short funny comment before asking the next question.
+- Once ALL five topics have been covered AND you have had at least 4 exchanges, \
+  smoothly ask for their email so you can send the report. End that message with \
+  the exact marker: [ASK_EMAIL]
+- Keep replies concise: 2-4 sentences max.
+- Never reveal you are an AI. You are Soy Bot."""
 BREVO_API_KEY  = os.getenv("BREVO_API_KEY", "")
 _from_raw      = os.getenv("REPORT_FROM_EMAIL", "")
 FROM_NAME, FROM_EMAIL = __import__("email.utils", fromlist=["parseaddr"]).parseaddr(_from_raw)
@@ -141,7 +149,7 @@ def chat_with_groq(history: list[dict], user_message: str) -> tuple[str, bool]:
         return ("The soy sauce data streams are temporarily overloaded! "
                 "Try again in a bit. 🫙", False)
 
-    messages = [{"role": "system", "content": GEMINI_SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for turn in history:
         messages.append({"role": turn["role"], "content": turn["text"]})
     messages.append({"role": "user", "content": user_message})
@@ -168,6 +176,12 @@ def save_lead(
     reason: str,
     ai_reply: str,
     email: str,
+    fav_brand: str | None = None,
+    dishes: str | None = None,
+    origin_country: str | None = None,
+    market_outlook: str | None = None,
+    propensity_score: float | None = None,
+    score_breakdown: str | None = None,
 ) -> None:
     row = {
         "telegram_user_id": telegram_user_id,
@@ -176,6 +190,12 @@ def save_lead(
         "reason": reason,
         "ai_reply": ai_reply,
         "email": email,
+        "fav_brand": fav_brand,
+        "dishes": dishes,
+        "origin_country": origin_country,
+        "market_outlook": market_outlook,
+        "propensity_score": propensity_score,
+        "score_breakdown": score_breakdown,
         "created_at": now_cet(),
         "deleted_at": None,
     }
@@ -310,11 +330,25 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     reason = context.user_data.get("reason", "")
     ai_reply = context.user_data.get("ai_reply", "")
 
-    # Summarise conversation for BigQuery
-    history = context.user_data.get("history", [])
+    history  = context.user_data.get("history", [])
     user_turns = [t["text"] for t in history if t["role"] == "user"]
     reason   = " / ".join(user_turns[:3]) if user_turns else ""
     ai_reply = history[-1]["text"] if history else ""
+
+    # ── Score the conversation ──────────────────────────────────────────────
+    fav_brand = dishes = origin_country = market_outlook = None
+    propensity_score = score_breakdown = None
+    try:
+        result = score_conversation(history, GROQ_API_KEY)
+        fav_brand        = result.fav_brand
+        dishes           = result.dishes
+        origin_country   = result.origin_country
+        market_outlook   = result.market_outlook
+        propensity_score = result.propensity_score
+        score_breakdown  = result.breakdown_json()
+        logger.info("Propensity score for %s: %.1f (%s)", user.id, propensity_score, result.label)
+    except Exception as exc:
+        logger.error("Scoring failed for user %s: %s", user.id, exc, exc_info=True)
 
     try:
         save_lead(
@@ -324,6 +358,12 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             reason=reason,
             ai_reply=ai_reply,
             email=email,
+            fav_brand=fav_brand,
+            dishes=dishes,
+            origin_country=origin_country,
+            market_outlook=market_outlook,
+            propensity_score=propensity_score,
+            score_breakdown=score_breakdown,
         )
     except Exception as exc:
         logger.error("Failed to save lead: %s", exc, exc_info=True)
