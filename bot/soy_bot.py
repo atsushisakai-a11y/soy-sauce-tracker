@@ -15,6 +15,7 @@ Run:
   python soy_bot.py
 """
 
+import base64
 import json
 import logging
 import os
@@ -22,8 +23,12 @@ import re
 import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import brevo_python
+from brevo_python.api import transactional_emails_api
+from brevo_python.model.send_smtp_email import SendSmtpEmail
 from google import genai
 from dotenv import load_dotenv
 from google.cloud import bigquery
@@ -55,7 +60,15 @@ BQ_DATASET = os.getenv("BQ_DATASET", "raw")
 BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL   = "gemini-1.5-flash"
+BREVO_API_KEY  = os.getenv("BREVO_API_KEY", "")
+_from_raw      = os.getenv("REPORT_FROM_EMAIL", "")
+FROM_NAME, FROM_EMAIL = __import__("email.utils", fromlist=["parseaddr"]).parseaddr(_from_raw)
+if not FROM_EMAIL:
+    FROM_EMAIL = _from_raw
+if not FROM_NAME:
+    FROM_NAME = os.getenv("REPORT_FROM_NAME", "Soy Sauce Bot")
+PDF_PATH = Path(__file__).parent / "european_soy_sauce_market_report.pdf"
 CET = ZoneInfo("Europe/Amsterdam")
 
 
@@ -359,13 +372,72 @@ async def delete_confirm_email(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
+# ── /sendreport ───────────────────────────────────────────────────────────────
+async def send_report_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+
+    # Check PDF exists
+    if not PDF_PATH.exists():
+        await update.message.reply_text("Sorry, the report PDF is not available yet. 😔")
+        return
+
+    # Look up registered email
+    try:
+        email = lookup_email(user.id)
+    except Exception as exc:
+        logger.error("Failed to look up email: %s", exc, exc_info=True)
+        await update.message.reply_text("Something went wrong looking up your email. 😔")
+        return
+
+    if not email:
+        await update.message.reply_text(
+            "You don't have a registered email yet.\n"
+            "Type /start to sign up first! 🫙"
+        )
+        return
+
+    await update.message.reply_text(f"Sending the report to *{email}*… 📧", parse_mode="Markdown")
+
+    try:
+        pdf_b64 = base64.b64encode(PDF_PATH.read_bytes()).decode()
+        configuration = brevo_python.Configuration()
+        configuration.api_key["api-key"] = BREVO_API_KEY
+        with brevo_python.ApiClient(configuration) as api_client:
+            api = transactional_emails_api.TransactionalEmailsApi(api_client)
+            api.send_transac_email(SendSmtpEmail(
+                sender={"name": FROM_NAME, "email": FROM_EMAIL},
+                to=[{"email": email, "name": user.first_name or ""}],
+                subject="🫙 Your Exclusive European Soy Sauce Market Report",
+                html_content=f"""
+                <p>Hi {user.first_name or "there"},</p>
+                <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
+                <p>Track live prices at <a href="https://soy-sauce-tracker-s3eo.vercel.app">the tracker</a>.</p>
+                <p>To unsubscribe type <code>/delete</code> in Soy Bot on Telegram.</p>
+                <p><em>— {FROM_NAME}</em></p>
+                """,
+                attachment=[{"content": pdf_b64, "name": PDF_PATH.name}],
+            ))
+        await update.message.reply_text(
+            f"✅ Report sent to *{email}*! Check your inbox. 🫙",
+            parse_mode="Markdown",
+        )
+        logger.info("Report sent to %s (user %s)", email, user.id)
+    except Exception as exc:
+        logger.error("Failed to send report to %s: %s", email, exc, exc_info=True)
+        await update.message.reply_text(
+            f"Failed to send the email. 😔\n\nError: `{exc}`",
+            parse_mode="Markdown",
+        )
+
+
 # ── /help ─────────────────────────────────────────────────────────────────────
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "*Soy Bot — Command Reference* 🫙\n\n"
         "/start — Sign up for the exclusive report\n"
+        "/sendreport — Email the latest PDF report to your registered address\n"
         "/delete — Remove your registration and data\n"
-        "/cancel — Cancel the current sign-up flow\n"
+        "/cancel — Cancel the current flow\n"
         "/help — Show this message",
         parse_mode="Markdown",
     )
@@ -400,6 +472,7 @@ def main() -> None:
 
     app.add_handler(signup_handler)
     app.add_handler(delete_handler)
+    app.add_handler(CommandHandler("sendreport", send_report_command))
     app.add_handler(CommandHandler("help", help_command))
 
     logger.info("Soy Bot is running — polling for messages…")
