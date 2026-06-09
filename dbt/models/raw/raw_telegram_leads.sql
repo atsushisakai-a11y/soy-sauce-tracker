@@ -35,12 +35,12 @@ OPTIONS (
 );
 
 -- ── ALTER TABLE: add new columns to existing table ───────────────────────────
--- Run this if the table already exists without the new columns:
---
--- ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
---   ADD COLUMN IF NOT EXISTS fav_brand        STRING,
---   ADD COLUMN IF NOT EXISTS dishes           STRING,
---   ADD COLUMN IF NOT EXISTS origin_country   STRING,
---   ADD COLUMN IF NOT EXISTS market_outlook   STRING,
---   ADD COLUMN IF NOT EXISTS propensity_score FLOAT64,
---   ADD COLUMN IF NOT EXISTS score_breakdown  STRING;
+-- Run this if the table already exists without the new columns.
+-- Executed: 2026-06-09
+ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
+  ADD COLUMN IF NOT EXISTS fav_brand        STRING,
+  ADD COLUMN IF NOT EXISTS dishes           STRING,
+  ADD COLUMN IF NOT EXISTS origin_country   STRING,
+  ADD COLUMN IF NOT EXISTS market_outlook   STRING,
+  ADD COLUMN IF NOT EXISTS propensity_score FLOAT64,
+  ADD COLUMN IF NOT EXISTS score_breakdown  STRING;
