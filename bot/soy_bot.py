@@ -61,7 +61,7 @@ GEMINI_DAILY_LIMIT = int(os.getenv("GEMINI_DAILY_LIMIT", "50"))  # max AI calls 
 _gemini_usage: dict[date, int] = defaultdict(int)
 
 # ConversationHandler states
-ASKING_REASON, ASKING_EMAIL = range(2)
+ASKING_REASON, ASKING_EMAIL, CONFIRMING_DELETE_EMAIL = range(3)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 gemini = genai.Client(api_key=GEMINI_API_KEY)
@@ -295,24 +295,61 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
-# ── /delete ───────────────────────────────────────────────────────────────────
-async def delete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ── /delete — step 1: ask for email ──────────────────────────────────────────
+async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "To confirm deletion, please enter the *email address* you registered with. 📧",
+        parse_mode="Markdown",
+    )
+    return CONFIRMING_DELETE_EMAIL
+
+
+# ── /delete — step 2: verify email and delete ────────────────────────────────
+async def delete_confirm_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
+    email = (update.message.text or "").strip()
+
+    if not EMAIL_RE.match(email):
+        await update.message.reply_text(
+            "That doesn't look like a valid email. Please try again. 🫙",
+        )
+        return CONFIRMING_DELETE_EMAIL
+
+    # Check if this email exists for this user
+    try:
+        existing_email = lookup_email(user.id)
+    except Exception as exc:
+        logger.error("Failed to look up email for user %s: %s", user.id, exc, exc_info=True)
+        await update.message.reply_text(
+            f"Something went wrong. 😔\n\nError: `{exc}`",
+            parse_mode="Markdown",
+        )
+        return ConversationHandler.END
+
+    if existing_email is None or existing_email.lower() != email.lower():
+        await update.message.reply_text(
+            "❌ That email doesn't match our records. "
+            "Please check and try again, or type /cancel to abort."
+        )
+        return CONFIRMING_DELETE_EMAIL
+
+    # Email matches — insert deletion marker
     try:
         soft_delete_lead(user.id, first_name=user.first_name, username=user.username)
     except Exception as exc:
         logger.error("Failed to delete lead for user %s: %s", user.id, exc, exc_info=True)
         await update.message.reply_text(
-            f"Something went wrong while trying to delete your data. 😔\n\nError: `{exc}`",
+            f"Something went wrong while deleting your data. 😔\n\nError: `{exc}`",
             parse_mode="Markdown",
         )
-        return
+        return ConversationHandler.END
 
     await update.message.reply_text(
         "✅ Done — your registration has been removed from our database.\n\n"
         "If you ever want to sign up again, just type /start. "
         "No hard feelings, soy sauce is a complicated world. 🫙"
     )
+    return ConversationHandler.END
 
 
 # ── /help ─────────────────────────────────────────────────────────────────────
@@ -331,7 +368,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 def main() -> None:
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    conv_handler = ConversationHandler(
+    signup_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             ASKING_REASON: [
@@ -344,8 +381,18 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    app.add_handler(conv_handler)
-    app.add_handler(CommandHandler("delete", delete_registration))
+    delete_handler = ConversationHandler(
+        entry_points=[CommandHandler("delete", delete_start)],
+        states={
+            CONFIRMING_DELETE_EMAIL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, delete_confirm_email)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    app.add_handler(signup_handler)
+    app.add_handler(delete_handler)
     app.add_handler(CommandHandler("help", help_command))
 
     logger.info("Soy Bot is running — polling for messages…")
