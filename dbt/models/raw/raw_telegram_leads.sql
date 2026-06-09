@@ -46,7 +46,7 @@ ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
   ADD COLUMN IF NOT EXISTS propensity_score    FLOAT64,
   ADD COLUMN IF NOT EXISTS score_breakdown     STRING;
 
--- ── ALTER TABLE: add conversation_json column ────────────────────────────────
+-- ── ALTER TABLE: add conversation_json column ───────────────────────────────
 -- Executed: 2026-06-09
 ALTER TABLE `soy-sauce-tracker.raw.raw_telegram_leads`
-  ADD COLUMN IF NOT EXISTS conversation_json   STRING;
+  ADD COLUMN IF NOT EXISTS conversation_json STRING;
