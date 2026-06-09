@@ -213,10 +213,75 @@ export default function TechPage() {
           </p>
         </section>
 
-        {/* Propensity model explainer */}
+        {/* Stack cards */}
+        <section>
+          <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest mb-6 text-center">
+            Technical Stack
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {stack.map((s) => (
+              <div
+                key={s.name}
+                className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 flex flex-col gap-3 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{s.icon}</span>
+                    <div>
+                      <h4 className="font-semibold text-stone-900 text-sm">{s.name}</h4>
+                      <p className="text-xs text-amber-600 font-medium">{s.role}</p>
+                    </div>
+                  </div>
+                  {s.link && (
+                    <a
+                      href={s.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-stone-400 hover:text-stone-700 underline underline-offset-2 flex-shrink-0"
+                    >
+                      ↗ link
+                    </a>
+                  )}
+                </div>
+                <p className="text-sm text-stone-600 leading-relaxed">{s.description}</p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {s.badges.map((b) => (
+                    <span
+                      key={b}
+                      className="text-xs bg-stone-100 text-stone-600 rounded-md px-2 py-0.5 font-medium"
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* GitHub CTA */}
+        <section className="bg-stone-900 rounded-2xl p-8 text-center text-white space-y-4">
+          <h3 className="text-xl font-bold">All code is open source</h3>
+          <p className="text-stone-400 text-sm max-w-lg mx-auto">
+            Scraper, similarity algorithm, dbt models, and this dashboard are all in one public GitHub repository.
+          </p>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-white text-stone-900 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-stone-100 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            atsushisakai-a11y / soy-sauce-tracker
+          </a>
+        </section>
+
+        {/* Propensity model deep-dive */}
         <section className="space-y-6">
           <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest text-center">
-            Step 7 — Propensity-to-Buy Model
+            Step 7 — Propensity-to-Buy Model · Deep Dive
           </h3>
 
           {/* How it works */}
@@ -288,22 +353,18 @@ export default function TechPage() {
             <div className="space-y-2">
               {[
                 { dim: "Soy engagement",    score: 4, weight: "30%", reason: "Expressed love for soy sauce", calc: "0.30 × 4 = 1.20" },
-                { dim: "Cooking frequency", score: 2, weight: "25%", reason: "No information provided", calc: "0.25 × 2 = 0.50" },
-                { dim: "Brand awareness",   score: 5, weight: "20%", reason: "Specifically named Kikkoman", calc: "0.20 × 5 = 1.00" },
-                { dim: "Market sentiment",  score: 2, weight: "15%", reason: "No information provided", calc: "0.15 × 2 = 0.30" },
-                { dim: "Cultural affinity", score: 5, weight: "10%", reason: "Japanese background", calc: "0.10 × 5 = 0.50" },
+                { dim: "Cooking frequency", score: 2, weight: "25%", reason: "No information provided",      calc: "0.25 × 2 = 0.50" },
+                { dim: "Brand awareness",   score: 5, weight: "20%", reason: "Specifically named Kikkoman",  calc: "0.20 × 5 = 1.00" },
+                { dim: "Market sentiment",  score: 2, weight: "15%", reason: "No information provided",      calc: "0.15 × 2 = 0.30" },
+                { dim: "Cultural affinity", score: 5, weight: "10%", reason: "Japanese background",          calc: "0.10 × 5 = 0.50" },
               ].map((row) => (
                 <div key={row.dim} className="flex items-center gap-3">
                   <div className="w-36 shrink-0">
                     <span className="text-xs font-medium text-stone-700">{row.dim}</span>
                   </div>
-                  {/* Bar */}
                   <div className="flex gap-0.5">
                     {[1,2,3,4,5].map((i) => (
-                      <div
-                        key={i}
-                        className={`w-4 h-4 rounded-sm ${i <= row.score ? "bg-rose-400" : "bg-stone-100"}`}
-                      />
+                      <div key={i} className={`w-4 h-4 rounded-sm ${i <= row.score ? "bg-rose-400" : "bg-stone-100"}`} />
                     ))}
                   </div>
                   <span className="text-xs text-stone-500 w-6 shrink-0">{row.score}/5</span>
@@ -325,71 +386,6 @@ export default function TechPage() {
               to conversation completeness.
             </p>
           </div>
-        </section>
-
-        {/* Stack cards */}
-        <section>
-          <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest mb-6 text-center">
-            Technical Stack
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {stack.map((s) => (
-              <div
-                key={s.name}
-                className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 flex flex-col gap-3 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{s.icon}</span>
-                    <div>
-                      <h4 className="font-semibold text-stone-900 text-sm">{s.name}</h4>
-                      <p className="text-xs text-amber-600 font-medium">{s.role}</p>
-                    </div>
-                  </div>
-                  {s.link && (
-                    <a
-                      href={s.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-stone-400 hover:text-stone-700 underline underline-offset-2 flex-shrink-0"
-                    >
-                      ↗ link
-                    </a>
-                  )}
-                </div>
-                <p className="text-sm text-stone-600 leading-relaxed">{s.description}</p>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {s.badges.map((b) => (
-                    <span
-                      key={b}
-                      className="text-xs bg-stone-100 text-stone-600 rounded-md px-2 py-0.5 font-medium"
-                    >
-                      {b}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* GitHub CTA */}
-        <section className="bg-stone-900 rounded-2xl p-8 text-center text-white space-y-4">
-          <h3 className="text-xl font-bold">All code is open source</h3>
-          <p className="text-stone-400 text-sm max-w-lg mx-auto">
-            Scraper, similarity algorithm, dbt models, and this dashboard are all in one public GitHub repository.
-          </p>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-white text-stone-900 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-stone-100 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-            </svg>
-            atsushisakai-a11y / soy-sauce-tracker
-          </a>
         </section>
 
         <footer className="text-center text-xs text-stone-300 pb-4">
