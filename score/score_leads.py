@@ -143,34 +143,36 @@ def build_history(lead: dict) -> list[dict]:
 
 # ── Write scores back to BigQuery ─────────────────────────────────────────────
 def write_scores(bq: bigquery.Client, lead: dict, result: ScoringResult) -> None:
-    """UPDATE the lead row with scoring results using BigQuery DML."""
-    now_cet = datetime.now(CET).strftime("%Y-%m-%d %H:%M:%S.%f")
+    """Insert a new row carrying the scoring results.
 
-    query = f"""
-        UPDATE `{TABLE_FULL}`
-        SET
-            propensity_score = @propensity_score,
-            score_breakdown  = @score_breakdown,
-            fav_brand        = COALESCE(fav_brand,      @fav_brand),
-            dishes           = COALESCE(dishes,          @dishes),
-            origin_country   = COALESCE(origin_country, @origin_country),
-            market_outlook   = COALESCE(market_outlook,  @market_outlook)
-        WHERE telegram_user_id = @uid
-          AND created_at = @created_at
+    BigQuery streaming inserts cannot be UPDATE-d until the row leaves the
+    streaming buffer (~90 min). We use the same insert-a-new-row pattern as
+    the soft-delete: the fetch_leads query picks the latest row per user, so
+    the scored row naturally supersedes the original.
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("propensity_score", "FLOAT64",  result.propensity_score),
-            bigquery.ScalarQueryParameter("score_breakdown",  "STRING",   result.breakdown_json()),
-            bigquery.ScalarQueryParameter("fav_brand",        "STRING",   result.fav_brand),
-            bigquery.ScalarQueryParameter("dishes",           "STRING",   result.dishes),
-            bigquery.ScalarQueryParameter("origin_country",   "STRING",   result.origin_country),
-            bigquery.ScalarQueryParameter("market_outlook",   "STRING",   result.market_outlook),
-            bigquery.ScalarQueryParameter("uid",              "INT64",    lead["telegram_user_id"]),
-            bigquery.ScalarQueryParameter("created_at",       "DATETIME", str(lead["created_at"])),
-        ]
-    )
-    bq.query(query, job_config=job_config).result()
+    row = {
+        "telegram_user_id": lead["telegram_user_id"],
+        "first_name":        lead.get("first_name"),
+        "username":          lead.get("username"),
+        "email":             lead.get("email"),
+        "reason":            lead.get("reason"),
+        "ai_reply":          lead.get("ai_reply"),
+        "conversation_json": lead.get("conversation_json"),
+        # Prefer already-extracted fields; fill gaps from scoring result
+        "fav_brand":         lead.get("fav_brand") or result.fav_brand,
+        "dishes":            lead.get("dishes")    or result.dishes,
+        "origin_country":    lead.get("origin_country") or result.origin_country,
+        "market_outlook":    lead.get("market_outlook")  or result.market_outlook,
+        # Scoring output
+        "propensity_score":  result.propensity_score,
+        "score_breakdown":   result.breakdown_json(),
+        # Timestamps
+        "created_at":        datetime.now(CET).strftime("%Y-%m-%d %H:%M:%S.%f"),
+        "deleted_at":        None,
+    }
+    errors = bq.insert_rows_json(TABLE_FULL, [row])
+    if errors:
+        raise RuntimeError(f"BigQuery insert errors: {errors}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
