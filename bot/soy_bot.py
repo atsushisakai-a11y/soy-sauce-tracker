@@ -64,6 +64,22 @@ BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 GEMINI_MODEL   = "gemini-1.5-flash"
+GEMINI_SYSTEM_PROMPT = """You are Soy Bot, a quirky and enthusiastic specialist of the \
+European soy sauce market. Your personality is warm, witty, and genuinely funny — \
+think of a passionate sommelier who takes soy sauce far too seriously.
+
+You are having a free-flowing conversation with a user who is interested in your \
+exclusive European Soy Sauce Market Report. Your goals:
+1. Chat naturally and engagingly about soy sauce, prices, shops, brands — whatever \
+   the user brings up. Ask follow-up questions. Be curious.
+2. Share interesting facts or opinions about the European soy sauce market when relevant.
+3. After AT LEAST 3 back-and-forth exchanges, when the conversation feels natural, \
+   ask for their email address so you can send them the report. Do this smoothly, \
+   not abruptly.
+4. When you are ready to ask for their email, end your message with the exact marker: \
+   [ASK_EMAIL]
+5. Keep each reply concise — 2-5 sentences max. Be playful but not exhausting.
+6. Never mention you are an AI. You are Soy Bot."""
 BREVO_API_KEY  = os.getenv("BREVO_API_KEY", "")
 _from_raw      = os.getenv("REPORT_FROM_EMAIL", "")
 FROM_NAME, FROM_EMAIL = __import__("email.utils", fromlist=["parseaddr"]).parseaddr(_from_raw)
@@ -84,7 +100,7 @@ GEMINI_DAILY_LIMIT = int(os.getenv("GEMINI_DAILY_LIMIT", "50"))  # max AI calls 
 _gemini_usage: dict[date, int] = defaultdict(int)
 
 # ConversationHandler states
-ASKING_REASON, ASKING_EMAIL, CONFIRMING_DELETE_EMAIL = range(3)
+CHATTING, ASKING_EMAIL, CONFIRMING_DELETE_EMAIL = range(3)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 gemini = genai.Client(api_key=GEMINI_API_KEY)
@@ -111,27 +127,37 @@ else:
     logger.info("BigQuery: using Application Default Credentials")
 
 
-# ── Helper: Gemini funny reply ────────────────────────────────────────────────
-def generate_funny_reply(first_name: str, reason: str) -> str:
-    """Ask Gemini Flash for a funny, warm reply. Returns None if daily limit reached."""
+# ── Helper: Gemini multi-turn chat ───────────────────────────────────────────
+def chat_with_gemini(history: list[dict], user_message: str) -> tuple[str, bool]:
+    """Send a message to Gemini with full conversation history.
+
+    Returns (reply_text, ask_email_now).
+    ask_email_now is True when Gemini included [ASK_EMAIL] in its reply.
+    """
     today = date.today()
     if _gemini_usage[today] >= GEMINI_DAILY_LIMIT:
-        logger.warning("Gemini daily limit (%d) reached — skipping AI call", GEMINI_DAILY_LIMIT)
-        return None
-    prompt = (
-        f"The user's name is {first_name}. "
-        f"They said they are interested in the soy sauce market report because: \"{reason}\". "
-        "Write a funny, encouraging reply acknowledging their reason. "
-        "Do NOT ask for their email yet — just respond warmly to what they said."
-    )
+        logger.warning("Gemini daily limit (%d) reached", GEMINI_DAILY_LIMIT)
+        return ("The soy sauce market is so exciting I've momentarily overloaded! "
+                "Try again in a bit. 🫙", False)
+
+    # Build contents list from history + new message
+    contents = []
+    for turn in history:
+        contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
+    contents.append({"role": "user", "parts": [{"text": user_message}]})
+
     response = gemini.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt,
+        contents=contents,
         config=genai.types.GenerateContentConfig(system_instruction=GEMINI_SYSTEM_PROMPT),
     )
     _gemini_usage[today] += 1
     logger.info("Gemini usage today: %d/%d", _gemini_usage[today], GEMINI_DAILY_LIMIT)
-    return response.text.strip()
+
+    reply = response.text.strip()
+    ask_email = "[ASK_EMAIL]" in reply
+    reply = reply.replace("[ASK_EMAIL]", "").strip()
+    return reply, ask_email
 
 
 # ── Helper: BigQuery insert ───────────────────────────────────────────────────
@@ -213,48 +239,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     first_name = user.first_name or "there"
 
+    context.user_data["history"] = []
+    context.user_data["turn_count"] = 0
+
     greeting = (
         f"Hi {first_name}! 🫙\n\n"
         "My name is Soy Bot, a specialist of the European soy sauce market. "
-        "I help serious soy sauce enthusiasts (and market researchers) stay ahead "
-        "of pricing trends across the continent.\n\n"
-        "I would love to send you our exclusive report — but first, "
-        "*why are you interested in the European soy sauce market?* 🤔"
+        "I help soy sauce enthusiasts and market researchers stay ahead of pricing "
+        "trends across Europe.\n\n"
+        "So — what brings you to the world of European soy sauce? 🤔"
     )
-    await update.message.reply_text(greeting, parse_mode="Markdown")
-    return ASKING_REASON
+    await update.message.reply_text(greeting)
+    return CHATTING
 
 
-# ── State: receive reason ─────────────────────────────────────────────────────
-async def receive_reason(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user = update.effective_user
-    reason = update.message.text or ""
+# ── State: free chat with Gemini ──────────────────────────────────────────────
+async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_message = update.message.text or ""
+    history: list = context.user_data.setdefault("history", [])
 
-    # Store for later
-    context.user_data["reason"] = reason
-
-    # Generate funny AI reply
-    await update.message.reply_text("One moment while I process this profound insight… 🧐")
     try:
-        funny_reply = generate_funny_reply(user.first_name or "friend", reason)
-        if funny_reply is None:
-            funny_reply = (
-                "That's a fascinating reason! The soy sauce market rewards the curious mind. 🫙✨"
-            )
+        reply, ask_email_now = chat_with_gemini(history, user_message)
     except Exception as exc:
-        logger.warning("Gemini API error: %s", exc)
-        funny_reply = (
-            "That's a fascinating reason! The soy sauce market rewards the curious mind. 🫙✨"
+        logger.warning("Gemini error: %s", exc)
+        reply = "The soy sauce data streams are temporarily overloaded — try again in a moment! 🫙"
+        ask_email_now = False
+
+    # Store turn in history
+    history.append({"role": "user",  "text": user_message})
+    history.append({"role": "model", "text": reply})
+    context.user_data["turn_count"] = context.user_data.get("turn_count", 0) + 1
+
+    await update.message.reply_text(reply)
+
+    if ask_email_now:
+        await update.message.reply_text(
+            "📧 What is your email address?",
         )
+        return ASKING_EMAIL
 
-    context.user_data["ai_reply"] = funny_reply
-
-    await update.message.reply_text(funny_reply)
-    await update.message.reply_text(
-        "Now, to send you the exclusive report — what is your *email address*? 📧",
-        parse_mode="Markdown",
-    )
-    return ASKING_EMAIL
+    return CHATTING
 
 
 # ── State: receive email ──────────────────────────────────────────────────────
@@ -275,6 +299,12 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user = update.effective_user
     reason = context.user_data.get("reason", "")
     ai_reply = context.user_data.get("ai_reply", "")
+
+    # Summarise conversation for BigQuery
+    history = context.user_data.get("history", [])
+    user_turns = [t["text"] for t in history if t["role"] == "user"]
+    reason   = " / ".join(user_turns[:3]) if user_turns else ""
+    ai_reply = history[-1]["text"] if history else ""
 
     try:
         save_lead(
@@ -452,8 +482,8 @@ def main() -> None:
     signup_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            ASKING_REASON: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_reason)
+            CHATTING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)
             ],
             ASKING_EMAIL: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email)
