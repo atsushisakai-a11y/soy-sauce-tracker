@@ -1,24 +1,29 @@
 """
-send_report.py — Send the exclusive PDF report to all active subscribers.
+send_report.py — Send the exclusive PDF report to all active subscribers via Brevo.
 
 Usage:
     python3 send_report.py --pdf path/to/report.pdf
     python3 send_report.py --pdf path/to/report.pdf --dry-run  # preview only, no emails sent
 
 Requirements:
-    - RESEND_API_KEY in .env
-    - REPORT_FROM_EMAIL in .env  (e.g. atsushi@yourdomain.com)
+    - BREVO_API_KEY in .env
+    - REPORT_FROM_EMAIL in .env  (e.g. atsushi_sakai1208@hotmail.com)
+    - REPORT_FROM_NAME in .env   (e.g. Soy Sauce Bot)
     - Active subscribers in BigQuery raw.raw_telegram_leads
 """
 
 import argparse
+import base64
 import json
 import logging
 import os
 import sys
+from email.utils import parseaddr
 from pathlib import Path
 
-import resend
+import brevo_python
+from brevo_python.api import transactional_emails_api
+from brevo_python.model.send_smtp_email import SendSmtpEmail
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -33,12 +38,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-RESEND_API_KEY  = os.environ["RESEND_API_KEY"]
-FROM_EMAIL      = os.environ["REPORT_FROM_EMAIL"]   # e.g. "Soy Bot <report@yourdomain.com>"
-BQ_PROJECT      = os.getenv("BQ_PROJECT",  "soy-sauce-tracker")
-BQ_TABLE_FULL   = f"{BQ_PROJECT}.raw.raw_telegram_leads"
+BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
+BQ_PROJECT     = os.getenv("BQ_PROJECT", "soy-sauce-tracker")
+BQ_TABLE_FULL  = f"{BQ_PROJECT}.raw.raw_telegram_leads"
 
-resend.api_key = RESEND_API_KEY
+# Parse "Soy Sauce Bot <email@example.com>" or plain "email@example.com"
+_from_raw      = os.environ["REPORT_FROM_EMAIL"]
+FROM_NAME, FROM_EMAIL = parseaddr(_from_raw)
+if not FROM_EMAIL:
+    FROM_EMAIL = _from_raw
+if not FROM_NAME:
+    FROM_NAME  = os.getenv("REPORT_FROM_NAME", "Soy Sauce Bot")
 
 # ── BigQuery client ───────────────────────────────────────────────────────────
 _gcp_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
@@ -70,67 +80,75 @@ def get_active_subscribers() -> list[dict]:
           AND email IS NOT NULL
     """
     rows = list(bq.query(query).result())
-    return [{"first_name": r.first_name, "email": r.email} for r in rows]
+    return [{"first_name": r.first_name or "there", "email": r.email} for r in rows]
 
 
 # ── Send one email ────────────────────────────────────────────────────────────
 def send_report_email(first_name: str, email: str, pdf_path: Path) -> None:
-    pdf_bytes = pdf_path.read_bytes()
+    pdf_bytes   = pdf_path.read_bytes()
+    pdf_b64     = base64.b64encode(pdf_bytes).decode()
 
-    params = resend.Emails.SendParams(
-        from_=FROM_EMAIL,
-        to=[email],
-        subject="🫙 Your Exclusive European Soy Sauce Market Report",
-        html=f"""
-        <p>Hi {first_name or "there"},</p>
+    configuration = brevo_python.Configuration()
+    configuration.api_key["api-key"] = BREVO_API_KEY
 
-        <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
+    with brevo_python.ApiClient(configuration) as api_client:
+        api = transactional_emails_api.TransactionalEmailsApi(api_client)
 
-        <p>Inside you'll find:</p>
-        <ul>
-            <li>Monthly price trends across 10+ European shops</li>
-            <li>Brand-level comparisons</li>
-            <li>Country-by-country breakdowns</li>
-        </ul>
+        email_obj = SendSmtpEmail(
+            sender={"name": FROM_NAME, "email": FROM_EMAIL},
+            to=[{"email": email, "name": first_name}],
+            subject="🫙 Your Exclusive European Soy Sauce Market Report",
+            html_content=f"""
+            <p>Hi {first_name},</p>
 
-        <p>
-            You can also track live prices at
-            <a href="https://kikkoman-price-tracker.vercel.app">
-                the price tracker
-            </a>.
-        </p>
+            <p>Your exclusive <strong>European Soy Sauce Market Report</strong> is attached! 🫙</p>
 
-        <p>
-            To unsubscribe, open Soy Bot on Telegram and type <code>/delete</code>.<br>
-        </p>
+            <p>Inside you'll find:</p>
+            <ul>
+                <li>Monthly price trends across 10+ European shops</li>
+                <li>Brand-level comparisons</li>
+                <li>Country-by-country breakdowns</li>
+            </ul>
 
-        <p>May your soy sauce always be perfectly priced. 🫙</p>
-        <p><em>— Soy Bot</em></p>
-        """,
-        attachments=[
-            resend.Attachment(
-                filename=pdf_path.name,
-                content=list(pdf_bytes),
-            )
-        ],
-    )
-    resend.Emails.send(params)
+            <p>
+                You can also track live prices at
+                <a href="https://kikkoman-price-tracker.vercel.app">the price tracker</a>.
+            </p>
+
+            <p>
+                To unsubscribe, open Soy Bot on Telegram and type <code>/delete</code>.
+            </p>
+
+            <p>May your soy sauce always be perfectly priced. 🫙</p>
+            <p><em>— {FROM_NAME}</em></p>
+            """,
+            attachment=[{
+                "content": pdf_b64,
+                "name": pdf_path.name,
+            }],
+        )
+        api.send_transac_email(email_obj)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Send exclusive report to all active subscribers")
+    parser = argparse.ArgumentParser(
+        description="Send exclusive PDF report to all active subscribers"
+    )
     parser.add_argument("--pdf",     required=True, help="Path to the PDF report file")
-    parser.add_argument("--dry-run", action="store_true", help="Preview recipients without sending")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Preview recipients without sending emails")
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
     if not pdf_path.exists():
         logger.error("PDF not found: %s", pdf_path)
         sys.exit(1)
-    if not pdf_path.suffix.lower() == ".pdf":
+    if pdf_path.suffix.lower() != ".pdf":
         logger.error("File must be a .pdf: %s", pdf_path)
         sys.exit(1)
+
+    logger.info("Sender: %s <%s>", FROM_NAME, FROM_EMAIL)
 
     subscribers = get_active_subscribers()
     if not subscribers:
@@ -139,7 +157,7 @@ def main() -> None:
 
     logger.info("Found %d active subscriber(s):", len(subscribers))
     for s in subscribers:
-        logger.info("  - %s <%s>", s["first_name"] or "?", s["email"])
+        logger.info("  - %s <%s>", s["first_name"], s["email"])
 
     if args.dry_run:
         logger.info("Dry run — no emails sent.")
