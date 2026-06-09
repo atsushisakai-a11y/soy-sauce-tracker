@@ -525,6 +525,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+# ── Fallback: message outside any active conversation ─────────────────────────
+async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Catches messages that don't match any ConversationHandler state.
+
+    This typically happens after a bot restart wipes in-memory conversation state.
+    """
+    await update.message.reply_text(
+        "Oops — it looks like our conversation got interrupted (I may have just restarted 🫙).\n\n"
+        "Type /start to begin again!"
+    )
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -556,6 +568,8 @@ def main() -> None:
     app.add_handler(delete_handler)
     app.add_handler(CommandHandler("sendreport", send_report_command))
     app.add_handler(CommandHandler("help", help_command))
+    # Catch-all: messages outside an active conversation (e.g. after a bot restart)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_handler))
 
     logger.info("Soy Bot is running — polling for messages…")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
