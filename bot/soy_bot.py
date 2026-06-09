@@ -23,7 +23,7 @@ import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
@@ -64,15 +64,13 @@ _gemini_usage: dict[date, int] = defaultdict(int)
 ASKING_REASON, ASKING_EMAIL = range(2)
 
 # ── Clients ───────────────────────────────────────────────────────────────────
-genai.configure(api_key=GEMINI_API_KEY)
-gemini = genai.GenerativeModel(
-    model_name=GEMINI_MODEL,
-    system_instruction=(
-        "You are Soy Bot, a quirky and enthusiastic specialist of the European soy sauce market. "
-        "Your personality is warm, slightly dramatic, and genuinely funny — think of a sommelier "
-        "who takes soy sauce far too seriously. "
-        "Keep your reply to 2-4 sentences. End with something that makes the person smile."
-    ),
+gemini = genai.Client(api_key=GEMINI_API_KEY)
+
+GEMINI_SYSTEM_PROMPT = (
+    "You are Soy Bot, a quirky and enthusiastic specialist of the European soy sauce market. "
+    "Your personality is warm, slightly dramatic, and genuinely funny — think of a sommelier "
+    "who takes soy sauce far too seriously. "
+    "Keep your reply to 2-4 sentences. End with something that makes the person smile."
 )
 
 # BigQuery: use service account JSON from env var (cloud) or ADC (local)
@@ -103,7 +101,11 @@ def generate_funny_reply(first_name: str, reason: str) -> str:
         "Write a funny, encouraging reply acknowledging their reason. "
         "Do NOT ask for their email yet — just respond warmly to what they said."
     )
-    response = gemini.generate_content(prompt)
+    response = gemini.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=genai.types.GenerateContentConfig(system_instruction=GEMINI_SYSTEM_PROMPT),
+    )
     _gemini_usage[today] += 1
     logger.info("Gemini usage today: %d/%d", _gemini_usage[today], GEMINI_DAILY_LIMIT)
     return response.text.strip()
