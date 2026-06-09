@@ -15,14 +15,18 @@ Run:
   python soy_bot.py
 """
 
+import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+import tempfile
+from collections import defaultdict
+from datetime import date, datetime, timezone
 
 import google.generativeai as genai
 from dotenv import load_dotenv
 from google.cloud import bigquery
+from google.oauth2 import service_account
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -51,6 +55,10 @@ BQ_TABLE = os.getenv("BQ_TABLE", "raw_telegram_leads")
 BQ_TABLE_FULL = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
 
 GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_DAILY_LIMIT = int(os.getenv("GEMINI_DAILY_LIMIT", "50"))  # max AI calls per day
+
+# Simple in-memory daily counter (resets when bot restarts / at midnight)
+_gemini_usage: dict[date, int] = defaultdict(int)
 
 # ConversationHandler states
 ASKING_REASON, ASKING_EMAIL = range(2)
@@ -66,12 +74,29 @@ gemini = genai.GenerativeModel(
         "Keep your reply to 2-4 sentences. End with something that makes the person smile."
     ),
 )
-bq = bigquery.Client(project=BQ_PROJECT)
+
+# BigQuery: use service account JSON from env var (cloud) or ADC (local)
+_gcp_credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+if _gcp_credentials_json:
+    _sa_info = json.loads(_gcp_credentials_json)
+    _credentials = service_account.Credentials.from_service_account_info(
+        _sa_info,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    bq = bigquery.Client(project=BQ_PROJECT, credentials=_credentials)
+    logger.info("BigQuery: using service account credentials from env var")
+else:
+    bq = bigquery.Client(project=BQ_PROJECT)
+    logger.info("BigQuery: using Application Default Credentials")
 
 
 # ── Helper: Gemini funny reply ────────────────────────────────────────────────
 def generate_funny_reply(first_name: str, reason: str) -> str:
-    """Ask Gemini Flash for a funny, warm reply to the user's reason."""
+    """Ask Gemini Flash for a funny, warm reply. Returns None if daily limit reached."""
+    today = date.today()
+    if _gemini_usage[today] >= GEMINI_DAILY_LIMIT:
+        logger.warning("Gemini daily limit (%d) reached — skipping AI call", GEMINI_DAILY_LIMIT)
+        return None
     prompt = (
         f"The user's name is {first_name}. "
         f"They said they are interested in the soy sauce market report because: \"{reason}\". "
@@ -79,6 +104,8 @@ def generate_funny_reply(first_name: str, reason: str) -> str:
         "Do NOT ask for their email yet — just respond warmly to what they said."
     )
     response = gemini.generate_content(prompt)
+    _gemini_usage[today] += 1
+    logger.info("Gemini usage today: %d/%d", _gemini_usage[today], GEMINI_DAILY_LIMIT)
     return response.text.strip()
 
 
@@ -155,8 +182,12 @@ async def receive_reason(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("One moment while I process this profound insight… 🧐")
     try:
         funny_reply = generate_funny_reply(user.first_name or "friend", reason)
+        if funny_reply is None:
+            funny_reply = (
+                "That's a fascinating reason! The soy sauce market rewards the curious mind. 🫙✨"
+            )
     except Exception as exc:
-        logger.warning("Claude API error: %s", exc)
+        logger.warning("Gemini API error: %s", exc)
         funny_reply = (
             "That's a fascinating reason! The soy sauce market rewards the curious mind. 🫙✨"
         )
