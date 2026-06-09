@@ -137,6 +137,25 @@ def save_lead(
 
 
 # ── Helper: BigQuery soft-delete ──────────────────────────────────────────────
+def lookup_email(telegram_user_id: int) -> str | None:
+    """Return the most recent email on record for this user, or None."""
+    query = f"""
+        SELECT email
+        FROM `{BQ_TABLE_FULL}`
+        WHERE telegram_user_id = @uid
+          AND email IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("uid", "INT64", telegram_user_id)
+        ]
+    )
+    rows = list(bq.query(query, job_config=job_config).result())
+    return rows[0].email if rows else None
+
+
 def soft_delete_lead(
     telegram_user_id: int,
     first_name: str | None = None,
@@ -148,6 +167,7 @@ def soft_delete_lead(
     the streaming buffer (~90 min). Instead we insert a marker row with
     deleted_at set; queries treat the latest row per user as the truth.
     """
+    email = lookup_email(telegram_user_id)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "telegram_user_id": telegram_user_id,
@@ -155,7 +175,7 @@ def soft_delete_lead(
         "username": username,
         "reason": None,
         "ai_reply": None,
-        "email": None,
+        "email": email,
         "created_at": now,
         "deleted_at": now,
     }
