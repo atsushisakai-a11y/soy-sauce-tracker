@@ -1,6 +1,51 @@
+import fs from "fs";
+import path from "path";
 import Link from "next/link";
 
 const GITHUB_URL = "https://github.com/atsushisakai-a11y/soy-sauce-tracker";
+
+// ── dbt Data Quality types & loader ──────────────────────────────────────────
+type TestResult = {
+  name: string;
+  model: string;
+  status: "pass" | "fail" | "warn";
+  execution_time: number;
+};
+type DbtSummary = {
+  generated_at: string;
+  total: number;
+  passed: number;
+  failed: number;
+  warned: number;
+  models: number;
+  tests: TestResult[];
+};
+function loadDbtSummary(): DbtSummary | null {
+  try {
+    const p = path.join(process.cwd(), "public/dbt-docs/summary.json");
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch { return null; }
+}
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+    }) + " UTC";
+  } catch { return iso; }
+}
+const LAYER_ORDER = ["raw", "staging", "dwh", "datamart"];
+function layerFromModel(model: string) {
+  for (const l of LAYER_ORDER) if (model.startsWith(l)) return l;
+  return "other";
+}
+const LAYER_COLORS: Record<string, string> = {
+  raw:      "bg-stone-100 text-stone-600 border-stone-200",
+  staging:  "bg-blue-50   text-blue-700  border-blue-200",
+  dwh:      "bg-purple-50 text-purple-700 border-purple-200",
+  datamart: "bg-green-50  text-green-700  border-green-200",
+  other:    "bg-gray-50   text-gray-600   border-gray-200",
+};
 
 type StackCard = {
   icon: string;
@@ -103,6 +148,17 @@ const pipeline = [
 ];
 
 export default function TechPage() {
+  const dbt = loadDbtSummary();
+  const dbtByLayer: Record<string, TestResult[]> = {};
+  if (dbt) {
+    for (const t of dbt.tests) {
+      const l = layerFromModel(t.model);
+      if (!dbtByLayer[l]) dbtByLayer[l] = [];
+      dbtByLayer[l].push(t);
+    }
+  }
+  const allPass = dbt ? dbt.failed === 0 && dbt.warned === 0 : false;
+
   return (
     <main className="min-h-screen bg-stone-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-12">
@@ -277,6 +333,97 @@ export default function TechPage() {
             atsushisakai-a11y / soy-sauce-tracker
           </a>
         </section>
+
+        {/* dbt Data Quality — Step 6 */}
+        {dbt && (
+          <section className="space-y-5">
+            <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest text-center">
+              Step 6 — dbt Data Quality
+            </h3>
+
+            {/* Scorecards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: "Models",  value: dbt.models,  color: "text-stone-900" },
+                { label: "Tests",   value: dbt.total,   color: "text-stone-900" },
+                { label: "Passed",  value: dbt.passed,  color: "text-green-600" },
+                { label: "Failed",  value: dbt.failed,  color: dbt.failed > 0 ? "text-red-600" : "text-green-600" },
+              ].map(c => (
+                <div key={c.label} className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
+                  <p className="text-xs font-medium text-stone-400 uppercase tracking-wider">{c.label}</p>
+                  <p className={`text-4xl font-bold mt-1 ${c.color}`}>{c.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Status banner */}
+            <div className={`rounded-2xl p-4 flex items-center gap-3 border ${
+              allPass ? "bg-green-50 border-green-200 text-green-800"
+                      : "bg-red-50 border-red-200 text-red-800"
+            }`}>
+              <span className="text-2xl">{allPass ? "✅" : "❌"}</span>
+              <div>
+                <p className="font-semibold text-sm">
+                  {allPass
+                    ? `All ${dbt.total} tests passing — data quality confirmed`
+                    : `${dbt.failed} test(s) failing — review required`}
+                </p>
+                <p className="text-xs opacity-70 mt-0.5">
+                  Last run: {formatDate(dbt.generated_at)} · {dbt.passed} passed · {dbt.failed} failed · {dbt.warned} warned
+                </p>
+              </div>
+            </div>
+
+            {/* Tests by layer */}
+            {LAYER_ORDER.filter(l => dbtByLayer[l]?.length).map(layer => (
+              <div key={layer} className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+                <div className={`px-5 py-3 flex items-center justify-between border-b ${LAYER_COLORS[layer]}`}>
+                  <span className="text-xs font-bold uppercase tracking-widest">{layer}</span>
+                  <span className="text-xs font-medium">
+                    {dbtByLayer[layer].filter(t => t.status === "pass").length} / {dbtByLayer[layer].length} passed
+                  </span>
+                </div>
+                <div className="divide-y divide-stone-50">
+                  {dbtByLayer[layer].map(t => (
+                    <div key={t.name} className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-stone-50">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`text-base flex-shrink-0 ${
+                          t.status === "pass" ? "text-green-500"
+                          : t.status === "warn" ? "text-amber-500"
+                          : "text-red-500"
+                        }`}>
+                          {t.status === "pass" ? "✓" : t.status === "warn" ? "⚠" : "✗"}
+                        </span>
+                        <span className="text-xs font-mono text-stone-600 truncate">{t.name}</span>
+                      </div>
+                      <span className="text-xs text-stone-300 flex-shrink-0">{t.execution_time}s</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Lineage DAG CTA */}
+            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-6 flex items-start gap-4">
+              <span className="text-3xl flex-shrink-0">🔀</span>
+              <div className="flex-1 space-y-1">
+                <h4 className="font-semibold text-stone-800">Interactive Lineage DAG — hosted on GitHub Pages</h4>
+                <p className="text-sm text-stone-500 leading-relaxed">
+                  Auto-generated by GitHub Actions on every pipeline run. Shows the full model dependency
+                  graph (raw → staging → dwh → datamart), column-level docs, source freshness, and all test definitions.
+                </p>
+                <a
+                  href="https://atsushisakai-a11y.github.io/soy-sauce-tracker/#!/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-xl text-sm font-semibold transition-colors mt-3"
+                >
+                  Open dbt Docs ↗
+                </a>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Propensity model deep-dive */}
         <section className="space-y-6">
