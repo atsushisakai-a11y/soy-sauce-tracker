@@ -9,8 +9,8 @@ export default function Nav() {
   const tabs = [
     { href: "/",                 label: "Dashboard" },
     { href: "/market",           label: "Market" },
-    { href: "/tech",             label: "Tech Stack" },
     { href: "/exclusive-report", label: "Exclusive Report" },
+    { href: "/tech",             label: "Tech Stack" },
     { href: "/about",            label: "About" },
   ];
 
