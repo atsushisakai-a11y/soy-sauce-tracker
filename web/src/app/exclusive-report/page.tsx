@@ -20,9 +20,7 @@ export default function ExclusiveReportPage() {
           {[
             "📈 Monthly price trend analysis across 10+ European shops",
             "🏷️ Brand-level comparison: Kikkoman, Pearl River Bridge, Lee Kum Kee & more",
-            "🌍 Country-by-country breakdowns (NL, DE, UK, FR…)",
             "💡 AI-powered insight summaries written in plain English",
-            "🔔 Alerts when prices drop significantly",
           ].map((item) => (
             <li key={item} className="flex items-start gap-2 text-stone-700">
               <span>{item}</span>

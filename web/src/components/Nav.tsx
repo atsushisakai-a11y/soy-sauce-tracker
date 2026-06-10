@@ -10,8 +10,8 @@ export default function Nav() {
     { href: "/",                 label: "Dashboard" },
     { href: "/market",           label: "Market" },
     { href: "/tech",             label: "Tech Stack" },
-    { href: "/about",            label: "About" },
     { href: "/exclusive-report", label: "Exclusive Report" },
+    { href: "/about",            label: "About" },
   ];
 
   return (
