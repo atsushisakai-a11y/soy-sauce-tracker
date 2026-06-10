@@ -10,8 +10,6 @@ import PriceRangeChart from "@/components/PriceRangeChart";
 import PriceTable from "@/components/PriceTable";
 import PriceScatterChart from "@/components/PriceScatterChart";
 import Price100mlChart from "@/components/Price100mlChart";
-import BrandDirectory from "@/components/BrandDirectory";
-import ShopDirectory from "@/components/ShopDirectory";
 
 type Props = {
   rows: PriceRow[];
@@ -87,11 +85,6 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
     [rows, selectedBrands, selectedSizes, selectedShops]
   );
 
-  const activeBrands = useMemo(
-    () => Array.from(new Set(filtered.map((r) => r.brand))).sort(),
-    [filtered]
-  );
-
   const stats    = scorecards(filtered);
   const trend    = pivotForTrend(filtered);
   const latest   = latestMonthRows(filtered);
@@ -157,8 +150,6 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
             <PriceScatterChart rows={filtered} colorBy="brand" />
             <PriceScatterChart rows={filtered} colorBy="shop" />
           </div>
-          <BrandDirectory activeBrands={activeBrands} />
-          <ShopDirectory rows={filtered} />
           <PriceTable rows={filtered} />
         </>
       ) : (
