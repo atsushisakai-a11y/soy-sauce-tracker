@@ -143,7 +143,7 @@ const pipeline = [
   { step: "4", label: "dbt DWH", detail: "SCD Type 2", color: "bg-teal-100 text-teal-700 border-teal-200" },
   { step: "5", label: "dbt Datamart", detail: "Monthly agg", color: "bg-green-100 text-green-700 border-green-200" },
   { step: "6", label: "dbt Docs", detail: "GitHub Pages", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  { step: "7", label: "Score Leads", detail: "Propensity model", color: "bg-rose-100 text-rose-700 border-rose-200" },
+  { step: "7", label: "Score Leads", detail: "Propensity model (To be added)", color: "bg-rose-100 text-rose-700 border-rose-200" },
   { step: "→", label: "Dashboard", detail: "Next.js + Recharts", color: "bg-amber-100 text-amber-700 border-amber-200" },
 ];
 
