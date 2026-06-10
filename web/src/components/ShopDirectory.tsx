@@ -66,10 +66,6 @@ const SHOP_META: Record<string, ShopMeta> = {
     flag: "🇳🇱",
     desc: "Major Dutch supermarket chain. Limited but growing Asian sauce selection, competitively priced.",
   },
-  "PLUS": {
-    flag: "🇳🇱",
-    desc: "Dutch supermarket cooperative. Carries a small selection of mainstream soy sauces.",
-  },
   "Picnic": {
     flag: "🇳🇱",
     desc: "Dutch online-only grocery delivery service. Growing assortment of Asian sauces available for home delivery.",
