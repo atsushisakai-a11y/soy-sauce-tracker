@@ -62,13 +62,15 @@ function FilterBar<T extends string | number>({
 }
 
 export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: Props) {
-  const allBrands = useMemo(() => Array.from(new Set(rows.map((r) => r.brand))).sort(), [rows]);
-  const allSizes  = useMemo(() => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b), [rows]);
-  const allShops  = useMemo(() => Array.from(new Set(rows.map((r) => r.shop_name))).sort(), [rows]);
+  const allBrands   = useMemo(() => Array.from(new Set(rows.map((r) => r.brand))).sort(), [rows]);
+  const allSizes    = useMemo(() => Array.from(new Set(rows.map((r) => r.volume_ml))).sort((a, b) => a - b), [rows]);
+  const allShops    = useMemo(() => Array.from(new Set(rows.map((r) => r.shop_name))).sort(), [rows]);
+  const allProducts = useMemo(() => Array.from(new Set(rows.map((r) => r.product_name))).sort(), [rows]);
 
-  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set(allBrands));
-  const [selectedSizes,  setSelectedSizes]  = useState<Set<number>>(new Set(allSizes));
-  const [selectedShops,  setSelectedShops]  = useState<Set<string>>(new Set(allShops));
+  const [selectedBrands,  setSelectedBrands]  = useState<Set<string>>(new Set(allBrands));
+  const [selectedSizes,   setSelectedSizes]   = useState<Set<number>>(new Set(allSizes));
+  const [selectedShops,   setSelectedShops]   = useState<Set<string>>(new Set(allShops));
+  const [selectedProduct, setSelectedProduct] = useState<string>("");
 
   const toggle = <T,>(set: Set<T>, val: T, setter: (s: Set<T>) => void) => {
     const next = new Set(set);
@@ -80,9 +82,10 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
     () => rows.filter((r) =>
       selectedBrands.has(r.brand) &&
       selectedSizes.has(r.volume_ml) &&
-      selectedShops.has(r.shop_name)
+      selectedShops.has(r.shop_name) &&
+      (selectedProduct === "" || r.product_name === selectedProduct)
     ),
-    [rows, selectedBrands, selectedSizes, selectedShops]
+    [rows, selectedBrands, selectedSizes, selectedShops, selectedProduct]
   );
 
   const stats    = scorecards(filtered);
@@ -118,6 +121,26 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
             onNone={() => setSelectedShops(new Set())}
             format={(v) => v}
           />
+        </div>
+        <div className="border-t border-stone-50 pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">Product</span>
+            {selectedProduct && (
+              <button onClick={() => setSelectedProduct("")} className="text-xs text-amber-600 hover:text-amber-800 font-medium">
+                Clear
+              </button>
+            )}
+          </div>
+          <select
+            value={selectedProduct}
+            onChange={(e) => setSelectedProduct(e.target.value)}
+            className="w-full border border-stone-200 rounded-lg px-3 py-1.5 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+          >
+            <option value="">All products</option>
+            {allProducts.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
         {(selectedBrands.size === 0 || selectedSizes.size === 0 || selectedShops.size === 0) && (
           <p className="text-xs text-stone-400 pt-1">
