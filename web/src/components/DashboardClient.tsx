@@ -18,45 +18,36 @@ type Props = {
   lastUpdated: string;
 };
 
-function FilterBar<T extends string | number>({
-  label, items, selected, onToggle, onAll, onNone, format,
+function FilterDropdown<T extends string | number>({
+  label, items, selected, onChange, format, allLabel,
 }: {
   label: string;
   items: T[];
-  selected: Set<T>;
-  onToggle: (v: T) => void;
-  onAll: () => void;
-  onNone: () => void;
+  selected: string;
+  onChange: (v: string) => void;
   format: (v: T) => string;
+  allLabel: string;
 }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">{label}</span>
-        <div className="flex gap-2">
-          <button onClick={onAll}  className="text-xs text-amber-600 hover:text-amber-800 font-medium">All</button>
-          <span className="text-stone-200">|</span>
-          <button onClick={onNone} className="text-xs text-stone-400 hover:text-stone-600 font-medium">None</button>
-        </div>
+        {selected && (
+          <button onClick={() => onChange("")} className="text-xs text-amber-600 hover:text-amber-800 font-medium">
+            Clear
+          </button>
+        )}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {items.map((v) => {
-          const active = selected.has(v);
-          return (
-            <button
-              key={String(v)}
-              onClick={() => onToggle(v)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                active
-                  ? "bg-amber-500 text-white border-amber-500"
-                  : "bg-white text-stone-400 border-stone-200 hover:border-amber-300 hover:text-amber-600"
-              }`}
-            >
-              {format(v)}
-            </button>
-          );
-        })}
-      </div>
+      <select
+        value={selected}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-stone-200 rounded-lg px-3 py-1.5 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+      >
+        <option value="">{allLabel}</option>
+        {items.map((v) => (
+          <option key={String(v)} value={String(v)}>{format(v)}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -67,25 +58,19 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
   const allShops    = useMemo(() => Array.from(new Set(rows.map((r) => r.shop_name))).sort(), [rows]);
   const allProducts = useMemo(() => Array.from(new Set(rows.map((r) => r.product_name))).sort(), [rows]);
 
-  const [selectedBrands,  setSelectedBrands]  = useState<Set<string>>(new Set(allBrands));
-  const [selectedSizes,   setSelectedSizes]   = useState<Set<number>>(new Set(allSizes));
-  const [selectedShops,   setSelectedShops]   = useState<Set<string>>(new Set(allShops));
+  const [selectedBrand,   setSelectedBrand]   = useState<string>("");
+  const [selectedSize,    setSelectedSize]    = useState<string>("");
+  const [selectedShop,    setSelectedShop]    = useState<string>("");
   const [selectedProduct, setSelectedProduct] = useState<string>("");
-
-  const toggle = <T,>(set: Set<T>, val: T, setter: (s: Set<T>) => void) => {
-    const next = new Set(set);
-    next.has(val) ? next.delete(val) : next.add(val);
-    setter(next);
-  };
 
   const filtered = useMemo(
     () => rows.filter((r) =>
-      selectedBrands.has(r.brand) &&
-      selectedSizes.has(r.volume_ml) &&
-      selectedShops.has(r.shop_name) &&
+      (selectedBrand === "" || r.brand === selectedBrand) &&
+      (selectedSize === "" || r.volume_ml === Number(selectedSize)) &&
+      (selectedShop === "" || r.shop_name === selectedShop) &&
       (selectedProduct === "" || r.product_name === selectedProduct)
     ),
-    [rows, selectedBrands, selectedSizes, selectedShops, selectedProduct]
+    [rows, selectedBrand, selectedSize, selectedShop, selectedProduct]
   );
 
   const stats    = scorecards(filtered);
@@ -96,57 +81,25 @@ export default function DashboardClient({ rows, byBrand, byShop, lastUpdated }: 
   return (
     <div className="space-y-8">
       {/* Filter bar */}
-      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4 space-y-4">
-        <FilterBar
-          label="Brand" items={allBrands} selected={selectedBrands}
-          onToggle={(v) => toggle(selectedBrands, v, setSelectedBrands)}
-          onAll={() => setSelectedBrands(new Set(allBrands))}
-          onNone={() => setSelectedBrands(new Set())}
-          format={(v) => v}
-        />
-        <div className="border-t border-stone-50 pt-4">
-          <FilterBar
-            label="Size" items={allSizes} selected={selectedSizes}
-            onToggle={(v) => toggle(selectedSizes, v, setSelectedSizes)}
-            onAll={() => setSelectedSizes(new Set(allSizes))}
-            onNone={() => setSelectedSizes(new Set())}
-            format={formatSize}
+      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm px-5 py-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <FilterDropdown
+            label="Brand" items={allBrands} selected={selectedBrand}
+            onChange={setSelectedBrand} format={(v) => v} allLabel="All brands"
+          />
+          <FilterDropdown
+            label="Size" items={allSizes} selected={selectedSize}
+            onChange={setSelectedSize} format={formatSize} allLabel="All sizes"
+          />
+          <FilterDropdown
+            label="Shop" items={allShops} selected={selectedShop}
+            onChange={setSelectedShop} format={(v) => v} allLabel="All shops"
+          />
+          <FilterDropdown
+            label="Product" items={allProducts} selected={selectedProduct}
+            onChange={setSelectedProduct} format={(v) => v} allLabel="All products"
           />
         </div>
-        <div className="border-t border-stone-50 pt-4">
-          <FilterBar
-            label="Shop" items={allShops} selected={selectedShops}
-            onToggle={(v) => toggle(selectedShops, v, setSelectedShops)}
-            onAll={() => setSelectedShops(new Set(allShops))}
-            onNone={() => setSelectedShops(new Set())}
-            format={(v) => v}
-          />
-        </div>
-        <div className="border-t border-stone-50 pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-stone-500 uppercase tracking-widest">Product</span>
-            {selectedProduct && (
-              <button onClick={() => setSelectedProduct("")} className="text-xs text-amber-600 hover:text-amber-800 font-medium">
-                Clear
-              </button>
-            )}
-          </div>
-          <select
-            value={selectedProduct}
-            onChange={(e) => setSelectedProduct(e.target.value)}
-            className="w-full border border-stone-200 rounded-lg px-3 py-1.5 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
-          >
-            <option value="">All products</option>
-            {allProducts.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-        {(selectedBrands.size === 0 || selectedSizes.size === 0 || selectedShops.size === 0) && (
-          <p className="text-xs text-stone-400 pt-1">
-            Select at least one brand, one size, and one shop to see data.
-          </p>
-        )}
       </div>
 
       {/* Scorecards */}
