@@ -4,11 +4,13 @@ Assign global_product_id to matched product groups across shops.
 
 Flow:
   1. Read all IS_MATCH=TRUE pairs from STAGING.STAGING_SIMILARITY_SCORES
-  2. Read all distinct (shop_name, product_name) from STAGING.STAGING_PRICES
-  3. Run union-find to cluster matched products into connected components
-  4. Assign a deterministic UUID5 to each component (keyed on its lexicographic root)
+  2. Read manual overrides from manual_matches.csv (for products the
+     text/image matcher can't catch, e.g. completely different naming)
+  3. Read all distinct (shop_name, product_name) from STAGING.STAGING_PRICES
+  4. Run union-find to cluster matched products into connected components
+  5. Assign a deterministic UUID5 to each component (keyed on its lexicographic root)
      — singletons (no match) get their own UUID, guaranteed unique and stable
-  5. Full-refresh STAGING.STAGING_PRODUCT_GROUPS with the mapping
+  6. Full-refresh STAGING.STAGING_PRODUCT_GROUPS with the mapping
 
 Why union-find?
   If A matches B and B matches C, all three belong to one group even though
@@ -21,6 +23,7 @@ Why UUID5 (deterministic)?
   scrape dates are added.
 """
 
+import csv
 import logging
 import os
 import uuid
@@ -29,6 +32,8 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
+
+MANUAL_MATCHES_PATH = os.path.join(os.path.dirname(__file__), "manual_matches.csv")
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -93,6 +98,27 @@ def get_client():
     return bigquery.Client(project=GCP_PROJECT)
 
 
+def load_manual_matches(path: str = MANUAL_MATCHES_PATH) -> list[tuple]:
+    """Read manual_matches.csv and emit (shop1, name1, shop2, name2) pairs —
+    one pair per consecutive row within each `group`, so an N-row group
+    chains into a single connected component via union-find."""
+    if not os.path.exists(path):
+        return []
+
+    groups: dict[str, list[tuple]] = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            groups.setdefault(row["group"], []).append((row["shop_name"], row["product_name"]))
+
+    pairs = []
+    for members in groups.values():
+        for i in range(1, len(members)):
+            shop1, name1 = members[0]
+            shop2, name2 = members[i]
+            pairs.append((shop1, name1, shop2, name2))
+    return pairs
+
+
 def ensure_table(client: bigquery.Client) -> None:
     client.query(f"""
         CREATE TABLE IF NOT EXISTS `{TABLE_ID}` (
@@ -121,6 +147,10 @@ def run() -> None:
     """).result()
     match_pairs: list[tuple] = [tuple(row) for row in result]
     log.info("Loaded %d IS_MATCH=TRUE pairs.", len(match_pairs))
+
+    manual_pairs = load_manual_matches()
+    log.info("Loaded %d manual override pairs.", len(manual_pairs))
+    match_pairs.extend(manual_pairs)
 
     if not match_pairs:
         log.info("No matched pairs — staging_product_groups will be empty.")
