@@ -701,41 +701,6 @@ export default function TechPage() {
             </div>
           </div>
 
-          {/* Full decision formula */}
-          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
-            <h4 className="font-semibold text-stone-900">Full decision formula</h4>
-            <div className="bg-stone-900 rounded-xl p-5 space-y-3 text-white font-mono text-sm">
-              <p className="text-stone-400 text-xs"># 1. Preprocess both images</p>
-              <p>img = remove_background(img) → remove_dark_liquid(img)</p>
-              <p className="text-stone-400 text-xs mt-3"># 2. Compute image score</p>
-              <p>dino_score  = cos( DINOv2_CLS(img_A), DINOv2_CLS(img_B) )</p>
-              <p>color_score = cos( RGB_hist(coloured_pixels_A), RGB_hist(coloured_pixels_B) )</p>
-              <p>image_score = √( dino_score × color_score )</p>
-              <p className="text-stone-400 text-xs mt-3"># 3. Text hard stops — brand detection via _detect_brands() (NAME_ALIASES + KIKKOMAN_PRODUCT_TERMS)</p>
-              <p>hard_stop = (</p>
-              <p className="pl-6">EXCLUSIVE_PAIRS conflict in names  <span className="text-red-400">→ veto</span></p>
-              <p className="pl-4">OR QUALIFIER_TERMS asymmetry in names  <span className="text-red-400">→ veto</span></p>
-              <p className="pl-4">OR volume extracted from A ≠ volume from B (±5%)  <span className="text-red-400">→ veto</span></p>
-              <p className="pl-4">OR different known brands detected  <span className="text-red-400">→ veto</span></p>
-              <p>)</p>
-              <p className="text-stone-400 text-xs mt-3"># 4. Adaptive threshold</p>
-              <p>threshold = 0.60 if (same_brand AND same_volume) else 0.80</p>
-              <p className="text-stone-400 text-xs mt-3"># 5. Final decision</p>
-              <p className="text-green-400">IS_MATCH = (not hard_stop) AND (image_score ≥ threshold)</p>
-            </div>
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-xl p-5 space-y-2">
-              <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">Real example — Koikuchi Shoyu 150ml vs Kikkoman Soy Sauce 150ml</p>
-              <div className="text-xs text-stone-600 space-y-1 leading-relaxed">
-                <p>① Preprocessed images → background white, liquid white</p>
-                <p>② dino_score ≈ 0.72 · color_score ≈ 0.42 → image_score = √(0.72 × 0.42) ≈ <strong>0.55</strong></p>
-                <p>③ <em>_detect_brands(&ldquo;Koikuchi Shoyu 150ML&rdquo;)</em>: no explicit brand found in name → secondary pass: &ldquo;koikuchi shoyu&rdquo; in <span className="font-mono bg-white border border-stone-100 px-1 rounded">KIKKOMAN_PRODUCT_TERMS</span> → brands = &#123;kikkoman&#125;. No EXCLUSIVE_PAIR, QUALIFIER, or volume mismatch → <strong>hard_stop = False</strong></p>
-                <p>④ same brand (kikkoman) AND same volume (150ml) → <strong>threshold = 0.60</strong></p>
-                <p>⑤ 0.55 ≥ 0.60? <strong className="text-red-600">No → IS_MATCH = False</strong> for this direct pair, but Union-Find transitivity via two higher-scoring pairs (0.61 and 0.73) pulls all four shops into the same <span className="font-mono bg-white border border-stone-100 px-1 rounded">global_product_id</span>.</p>
-                <p className="text-stone-400 mt-1">Contrast: <em>_detect_brands(&ldquo;Yamasa Koikuchi Shoyu 150ml&rdquo;)</em> → &ldquo;yamasa&rdquo; found in primary pass → secondary pass skipped → brands = &#123;yamasa&#125; → brand conflict vs Kikkoman fires correctly.</p>
-              </div>
-            </div>
-          </div>
-
           {/* Union-Find */}
           <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
             <h4 className="font-semibold text-stone-900">Step D — Union-Find clustering → global_product_id</h4>
