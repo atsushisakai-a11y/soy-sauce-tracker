@@ -69,8 +69,9 @@ DINO_MODEL_NAME = "facebook/dinov2-base"
 MATCH_THRESHOLD_BASE = 0.80
 
 # When both brand AND volume are independently confirmed to match, the same
-# product can appear with different label languages or photo angles (e.g.
-# Kikkoman 150ml Dutch label vs English label across shops), producing
+# product can appear with different naming conventions or photo angles (e.g.
+# Kikkoman 150ml listed as "Koikuchi Shoyu" (Japanese romanisation of 濃口醤油)
+# in one shop vs "Soy Sauce" in another), producing
 # image scores of 0.55–0.70 despite being the same SKU.  A lower threshold
 # applies so structural text agreement counts as positive evidence.
 MATCH_THRESHOLD_CONFIRMED = 0.60
@@ -405,7 +406,8 @@ def effective_threshold(name_a: str, name_b: str) -> float:
     When brand AND volume both independently confirm the two names refer to the
     same product line and size, the threshold is lowered to MATCH_THRESHOLD_CONFIRMED.
     This allows same-product pairs that differ only in label language or photo
-    angle (e.g. Kikkoman 150ml Dutch label vs English label) to still match even
+    angle (e.g. "Koikuchi Shoyu 150ML" vs "Soy Sauce 150ml" — same product, one
+    shop uses the Japanese romanisation 濃口醤油, the other uses the English name) to still match even
     though their DINOv2 scores fall short of the stricter base threshold.
     """
     if _same_brand(name_a, name_b) and _same_volume(name_a, name_b):
@@ -445,9 +447,9 @@ NAME_ALIASES: dict[str, str] = {
     # Japanese product-type terms → English equivalents (triggers qualifier penalty)
     "gen'en":           "reduced salt",   # 減塩 = reduced salt (Kikkoman Gen'en line)
     "genen":            "reduced salt",   # alternate romanisation without apostrophe
-    # "Koikuchi Shoyu" is Kikkoman's product-type name for their standard dark soy
-    # sauce; mirrors the LIKE '%koikuchi shoyu%' → 'Kikkoman' logic in staging_prices.sql.
-    # Needed so brand-detection finds "kikkoman" when the product name omits the brand word.
+    # "Koikuchi Shoyu" (濃口醤油) is the Japanese romanisation for standard dark soy sauce.
+    # Kikkoman sells it under this name in some shops, omitting the brand word entirely.
+    # Alias ensures brand-detection finds "kikkoman"; mirrors staging_prices.sql logic.
     "koikuchi shoyu":   "kikkoman soy sauce",
 }
 
