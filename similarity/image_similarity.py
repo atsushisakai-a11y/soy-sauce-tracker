@@ -61,13 +61,19 @@ HEADERS = {
 TIMEOUT = 15
 DINO_MODEL_NAME = "facebook/dinov2-base"
 
-# Pairs with combined_score >= this are considered the same product across shops.
+# Base image similarity threshold when no structural text confirmation exists.
 # DINOv2 cosine similarity for the exact same product image is typically 0.95+;
-# clearly different products score 0.3–0.6. Threshold set at 0.85 to require
-# strong visual agreement — calibrated from data: confirmed match
+# clearly different products score 0.3–0.6. Calibrated from data: confirmed match
 # "Naturally Brewed Soy Sauce (Yamasa) 150ml" vs "Yamasa Soy Sauce 150ml"
 # scores 0.81 with no penalties applied.
-MATCH_THRESHOLD = 0.80
+MATCH_THRESHOLD_BASE = 0.80
+
+# When both brand AND volume are independently confirmed to match, the same
+# product can appear with different label languages or photo angles (e.g.
+# Kikkoman 150ml Dutch label vs English label across shops), producing
+# image scores of 0.55–0.70 despite being the same SKU.  A lower threshold
+# applies so structural text agreement counts as positive evidence.
+MATCH_THRESHOLD_CONFIRMED = 0.60
 
 # Load DINOv2 model once at startup (~330 MB download on first run)
 log.info("Loading DINOv2 model…")
@@ -289,8 +295,10 @@ EXCLUSIVE_PAIRS = [
 QUALIFIER_TERMS = [
     "for rice",
     "for seafood",   # use-specific (e.g. Lee Kum Kee Seasoned for Seafood)
+    "gyoza",         # dipping sauce — different product category from plain soy sauce
     "nama",          # unpasteurised — different from regular
     "ponzu",         # citrus-based — different from plain soy sauce
+    "tamari",        # wheat-free variant — different product from koikuchi/regular soy sauce
     "teriyaki",
     "sushi",
     "less salt",
@@ -369,22 +377,41 @@ KNOWN_BRANDS = [
 ]
 
 
-def _name_mismatch_penalty(name_similarity: float) -> float:
-    """Return 0.3 when the two product names share almost no tokens (Jaccard < 0.10).
+def _same_brand(name_a: str, name_b: str) -> bool:
+    """True when both names reference the same known brand (after alias normalisation).
 
-    Acts as a safety net for pairs where the image model is fooled by visually
-    similar bottles but the names are completely different — e.g.
-    "Koikuchi Shoyu 500ML" vs "Sempio Rich & Mellow Jin S 500ml" share only
-    the volume token '500ml', giving Jaccard = 0.09.
-
-    Threshold 0.10 is very conservative: legitimate cross-language matches
-    (Healthy Boy → Dek Som Boon alias) and differently-worded same-product
-    names both score well above 0.10 after alias normalisation.
+    Symmetric with _brand_conflict_penalty — if _brand_conflict_penalty returns 0.2
+    this returns False; when both have no detected brand this returns False too.
     """
-    if name_similarity < 0.10:
-        log.debug("  Name mismatch penalty: name_similarity=%.4f < 0.10", name_similarity)
-        return 0.3
-    return 1.0
+    a = _normalize_name(name_a)
+    b = _normalize_name(name_b)
+    brands_a = {brand for brand in KNOWN_BRANDS if brand in a}
+    brands_b = {brand for brand in KNOWN_BRANDS if brand in b}
+    return bool(brands_a and brands_b and (brands_a & brands_b))
+
+
+def _same_volume(name_a: str, name_b: str) -> bool:
+    """True when both names specify a volume and the volumes agree within 5 %."""
+    vol_a = _extract_volume_ml(name_a)
+    vol_b = _extract_volume_ml(name_b)
+    if vol_a is None or vol_b is None:
+        return False
+    return abs(vol_a - vol_b) / max(vol_a, vol_b) <= 0.05
+
+
+def effective_threshold(name_a: str, name_b: str) -> float:
+    """Choose the IS_MATCH image-score threshold for this pair.
+
+    When brand AND volume both independently confirm the two names refer to the
+    same product line and size, the threshold is lowered to MATCH_THRESHOLD_CONFIRMED.
+    This allows same-product pairs that differ only in label language or photo
+    angle (e.g. Kikkoman 150ml Dutch label vs English label) to still match even
+    though their DINOv2 scores fall short of the stricter base threshold.
+    """
+    if _same_brand(name_a, name_b) and _same_volume(name_a, name_b):
+        log.debug("  Brand+volume confirmed — using relaxed threshold %.2f", MATCH_THRESHOLD_CONFIRMED)
+        return MATCH_THRESHOLD_CONFIRMED
+    return MATCH_THRESHOLD_BASE
 
 
 def _brand_conflict_penalty(name_a: str, name_b: str) -> float:
@@ -410,14 +437,18 @@ def _brand_conflict_penalty(name_a: str, name_b: str) -> float:
 # Key insight: order matters — longer phrases must come before their sub-words.
 NAME_ALIASES: dict[str, str] = {
     # Brand name equivalences (English ↔ Thai/Japanese alternate names)
-    "healthy boy":  "dek som boon",   # same brand, different language
+    "healthy boy":      "dek som boon",   # same brand, different language
     # Romanisation variants of Japanese 醤油
-    "shouyu":       "shoyu",
+    "shouyu":           "shoyu",
     # Dutch ↔ English
-    "sojasaus":     "soy sauce",
+    "sojasaus":         "soy sauce",
     # Japanese product-type terms → English equivalents (triggers qualifier penalty)
-    "gen'en":       "reduced salt",   # 減塩 = reduced salt (Kikkoman Gen'en line)
-    "genen":        "reduced salt",   # alternate romanisation without apostrophe
+    "gen'en":           "reduced salt",   # 減塩 = reduced salt (Kikkoman Gen'en line)
+    "genen":            "reduced salt",   # alternate romanisation without apostrophe
+    # "Koikuchi Shoyu" is Kikkoman's product-type name for their standard dark soy
+    # sauce; mirrors the LIKE '%koikuchi shoyu%' → 'Kikkoman' logic in staging_prices.sql.
+    # Needed so brand-detection finds "kikkoman" when the product name omits the brand word.
+    "koikuchi shoyu":   "kikkoman soy sauce",
 }
 
 
@@ -515,14 +546,20 @@ def run():
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
             name_score = compute_name_similarity(name_a, name_b)  # stored for reference
-            penalty    = (_conflict_penalty(name_a, name_b)
-                         * _qualifier_penalty(name_a, name_b)
-                         * _volume_penalty(name_a, name_b)
-                         * _brand_conflict_penalty(name_a, name_b)
-                         * _name_mismatch_penalty(name_score))
-            # Image similarity × text penalties (name not in base score)
-            combined   = round(img_score * penalty, 4)
-            is_match   = bool(combined >= MATCH_THRESHOLD)
+
+            # Hard stops — any one of these disqualifies the pair regardless of image score
+            hard_stop = (
+                _conflict_penalty(name_a, name_b) < 1.0       # mutually exclusive product types
+                or _qualifier_penalty(name_a, name_b) < 1.0   # one has use-specific qualifier
+                or _volume_penalty(name_a, name_b) < 1.0      # different sizes (different SKU)
+                or _brand_conflict_penalty(name_a, name_b) < 1.0  # different brands
+            )
+
+            # Threshold adapts to structural text confirmation:
+            # same brand + same volume → lower bar for image score
+            threshold  = effective_threshold(name_a, name_b)
+            combined   = round(img_score, 4)  # image score is the signal; penalties are gates
+            is_match   = bool(not hard_stop and img_score >= threshold)
             similarity_id = str(uuid.uuid4())
             log.info("  img=%.4f name=%.4f combined=%.4f is_match=%s  %s vs %s",
                      img_score, name_score, combined, is_match, name_a, name_b)
