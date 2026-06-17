@@ -377,17 +377,36 @@ KNOWN_BRANDS = [
     "tokusen",        # premium Kikkoman/artisan line — distinct from generic brands
 ]
 
+# Terms that hint at Kikkoman ONLY when no other known brand appears in the name.
+# "Koikuchi Shoyu" (濃口醤油) is a generic Japanese term for standard dark soy sauce,
+# so aliasing it globally to "kikkoman" would wrongly inject that brand into names like
+# "Yamasa Koikuchi Shoyu".  Using a conditional hint avoids that false positive while
+# still allowing "Koikuchi Shoyu 150ML TD" (no explicit brand) to be recognised as
+# Kikkoman when compared against "Kikkoman Soy Sauce 150ml".
+KIKKOMAN_PRODUCT_TERMS = [
+    "koikuchi shoyu",   # 濃口醤油 — standard dark soy sauce; Kikkoman's own label in some shops
+]
+
+
+def _detect_brands(name: str) -> set[str]:
+    """Return the set of known brands detected in name (after alias normalisation).
+
+    Primary pass: scan for KNOWN_BRANDS tokens in the normalised name.
+    Secondary pass: if no explicit brand was found, check KIKKOMAN_PRODUCT_TERMS.
+    The secondary pass is intentionally skipped when an explicit brand is already
+    present — so "Yamasa Koikuchi Shoyu" yields {yamasa}, not {yamasa, kikkoman}.
+    """
+    n = _normalize_name(name)
+    brands = {b for b in KNOWN_BRANDS if b in n}
+    if not brands and any(term in n for term in KIKKOMAN_PRODUCT_TERMS):
+        brands.add("kikkoman")
+    return brands
+
 
 def _same_brand(name_a: str, name_b: str) -> bool:
-    """True when both names reference the same known brand (after alias normalisation).
-
-    Symmetric with _brand_conflict_penalty — if _brand_conflict_penalty returns 0.2
-    this returns False; when both have no detected brand this returns False too.
-    """
-    a = _normalize_name(name_a)
-    b = _normalize_name(name_b)
-    brands_a = {brand for brand in KNOWN_BRANDS if brand in a}
-    brands_b = {brand for brand in KNOWN_BRANDS if brand in b}
+    """True when both names reference the same known brand."""
+    brands_a = _detect_brands(name_a)
+    brands_b = _detect_brands(name_b)
     return bool(brands_a and brands_b and (brands_a & brands_b))
 
 
@@ -419,14 +438,12 @@ def effective_threshold(name_a: str, name_b: str) -> float:
 def _brand_conflict_penalty(name_a: str, name_b: str) -> float:
     """Return 0.2 if the names reference different known brands.
 
-    Applies NAME_ALIASES first so alternate-language brand names resolve
-    to the same canonical token before comparison.
+    Uses _detect_brands() so that KIKKOMAN_PRODUCT_TERMS conditional hints
+    are applied consistently with _same_brand().
     Different brands = definitely different products, regardless of image score.
     """
-    a = _normalize_name(name_a)
-    b = _normalize_name(name_b)
-    brands_a = {brand for brand in KNOWN_BRANDS if brand in a}
-    brands_b = {brand for brand in KNOWN_BRANDS if brand in b}
+    brands_a = _detect_brands(name_a)
+    brands_b = _detect_brands(name_b)
     if brands_a and brands_b and not (brands_a & brands_b):
         log.debug("  Brand conflict: %s vs %s", brands_a, brands_b)
         return 0.2
@@ -447,10 +464,10 @@ NAME_ALIASES: dict[str, str] = {
     # Japanese product-type terms → English equivalents (triggers qualifier penalty)
     "gen'en":           "reduced salt",   # 減塩 = reduced salt (Kikkoman Gen'en line)
     "genen":            "reduced salt",   # alternate romanisation without apostrophe
-    # "Koikuchi Shoyu" (濃口醤油) is the Japanese romanisation for standard dark soy sauce.
-    # Kikkoman sells it under this name in some shops, omitting the brand word entirely.
-    # Alias ensures brand-detection finds "kikkoman"; mirrors staging_prices.sql logic.
-    "koikuchi shoyu":   "kikkoman soy sauce",
+    # Note: "koikuchi shoyu" (濃口醤油) is handled via KIKKOMAN_PRODUCT_TERMS in
+    # _detect_brands() rather than a global alias here, because it is a generic
+    # Japanese product-type term that other brands (e.g. Yamasa) may also use.
+    # A global alias would wrongly inject "kikkoman" into their names.
 }
 
 

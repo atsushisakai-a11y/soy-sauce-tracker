@@ -334,6 +334,428 @@ export default function TechPage() {
           </a>
         </section>
 
+        {/* Image Similarity — Step 2 */}
+        <section className="space-y-6">
+          <h3 className="text-sm font-semibold text-stone-400 uppercase tracking-widest text-center">
+            Step 2 — Image Similarity · Deep Dive
+          </h3>
+
+          {/* Overview */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <h4 className="font-semibold text-stone-900">Why image similarity?</h4>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              The same physical bottle of Kikkoman soy sauce is sold under different product names across
+              shops — one shop says <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">Koikuchi Shoyu 150ML TD</span>,
+              another says <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">Kikkoman Soy Sauce Pour Bottle, 150ml</span>,
+              a third says <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">KIKKOMAN SOY SAUCE TAFELFLES 150 ML</span>.
+              Name-matching alone fails because the overlap is too small. Image similarity solves this:
+              photographs of identical SKUs are near-identical once background and liquid are stripped, regardless
+              of language or capitalisation.
+            </p>
+          </div>
+
+          {/* Image preprocessing */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <h4 className="font-semibold text-stone-900">Step A — Image preprocessing</h4>
+            <p className="text-sm text-stone-500 leading-relaxed">
+              Raw product photos contain shop-specific backgrounds, props, and the dark soy sauce liquid
+              visible through the glass bottle. Both confound the model. Two preprocessing steps normalise
+              every image before any similarity is computed.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="border border-rose-100 bg-rose-50 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-rose-700 uppercase tracking-wide">① Background removal · rembg</p>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  <span className="font-mono bg-white border border-stone-100 px-1 rounded">rembg</span> runs a
+                  U2Net deep-segmentation model that isolates the foreground product and composites it onto
+                  a plain white canvas. This removes shop-specific backgrounds, coloured gradients, and
+                  decorative props that would otherwise inflate or deflate cosine similarity unrelated to
+                  the product itself.
+                </p>
+              </div>
+              <div className="border border-orange-100 bg-orange-50 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">② Dark-liquid removal</p>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Every soy sauce bottle contains the same near-black liquid visible through the glass.
+                  Pixels where R, G and B are all below 60 are replaced with white. Without this step the
+                  liquid dominates DINOv2&apos;s embedding, making every soy sauce bottle look similar.
+                  After removal the model compares only discriminative features: <strong>bottle shape,
+                  label design, and lid colour</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Image comparison */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+            <h4 className="font-semibold text-stone-900">Step B — Image comparison (two parallel signals)</h4>
+            <p className="text-sm text-stone-500">
+              Two independent visual signals are computed and combined. Neither alone is sufficient: DINOv2
+              is colour-agnostic; the histogram is insensitive to shape. Together they catch both failure modes.
+            </p>
+
+            {/* DINOv2 */}
+            <div className="border border-purple-100 rounded-xl overflow-hidden">
+              <div className="bg-purple-50 px-5 py-3 border-b border-purple-100 flex items-center gap-3">
+                <span className="text-xs font-bold text-purple-700 uppercase tracking-wide">Signal 1 — DINOv2 structural similarity</span>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="bg-stone-50 rounded-lg p-3 font-mono text-sm text-stone-700 space-y-1">
+                  <p>embedding = DINOv2_CLS_token(preprocessed_image)  <span className="text-stone-400 font-sans text-xs">← 768-dim vector</span></p>
+                  <p>dino_score = cosine_similarity(embedding_A, embedding_B)</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-purple-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-purple-800">Model</p>
+                    <p className="text-stone-600"><span className="font-mono">facebook/dinov2-base</span> Vision Transformer (~330 MB, loaded once at startup)</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-purple-800">What it captures</p>
+                    <p className="text-stone-600">Bottle shape, label layout and text arrangement. Self-supervised — not biased toward semantic categories.</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-purple-800">Weakness</p>
+                    <p className="text-stone-600">Largely colour-agnostic. A green-label and red-label bottle of the same shape score ~0.89 — too high without colour correction.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Colour histogram */}
+            <div className="border border-amber-100 rounded-xl overflow-hidden">
+              <div className="bg-amber-50 px-5 py-3 border-b border-amber-100">
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Signal 2 — Colour histogram similarity</span>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="bg-stone-50 rounded-lg p-3 font-mono text-sm text-stone-700 space-y-1">
+                  <p>hist = RGB_histogram(coloured_pixels_only, bins=32)  <span className="text-stone-400 font-sans text-xs">← 96-dim vector</span></p>
+                  <p>color_score = cosine_similarity(hist_A, hist_B)</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-amber-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-amber-800">Coloured pixels only</p>
+                    <p className="text-stone-600">Near-white pixels (background) and near-black pixels (residual liquid guard) are excluded. Only lid and label colour pixels enter the histogram.</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-amber-800">What it captures</p>
+                    <p className="text-stone-600">Lid colour and label dominant colours. A green-lid vs red-lid bottle scores ~0.4 — well below any match threshold.</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-amber-800">Weakness</p>
+                    <p className="text-stone-600">Insensitive to shape or layout. Cannot distinguish two different products with similar label palettes.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Combined */}
+            <div className="bg-stone-900 rounded-xl p-5 space-y-3 text-white">
+              <p className="text-xs font-bold uppercase tracking-wide text-stone-400">Combined image score — geometric mean</p>
+              <p className="text-2xl font-mono font-bold">image_score = √( dino_score × color_score )</p>
+              <p className="text-xs text-stone-400 leading-relaxed">
+                Geometric mean is chosen over arithmetic mean so that a near-zero on either signal collapses
+                the whole score toward zero. Example: DINOv2 = 0.89 (same shape), colour = 0.40 (different lid) →
+                image_score = √(0.89 × 0.40) ≈ <strong className="text-white">0.60</strong> — below the 0.80 base threshold → <strong className="text-red-400">IS_MATCH = False</strong>.
+              </p>
+            </div>
+          </div>
+
+          {/* Name comparison + penalties */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+            <h4 className="font-semibold text-stone-900">Step C — Name comparison (hard stops &amp; threshold adjustment)</h4>
+            <p className="text-sm text-stone-500 leading-relaxed">
+              Product names are never used to increase a score — only to disqualify a pair or to lower
+              the match threshold when structural text confirms the match. This avoids the old
+              multiplicative-penalty approach that could accidentally suppress valid matches.
+            </p>
+
+            {/* Jaccard + aliases */}
+            <div className="border border-stone-100 rounded-xl overflow-hidden">
+              <div className="bg-stone-50 px-5 py-3 border-b border-stone-100">
+                <span className="text-xs font-bold text-stone-600 uppercase tracking-wide">Name normalisation via NAME_ALIASES</span>
+              </div>
+              <div className="p-5 space-y-3">
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Before any text check, both product names are normalised through an alias table that maps
+                  alternate-language or alternate-romanisation forms to a canonical English token. This ensures
+                  brand detection and Jaccard similarity work across language boundaries.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-stone-100">
+                        <th className="text-left py-1.5 pr-4 text-stone-400 font-medium">Raw name fragment</th>
+                        <th className="text-left py-1.5 pr-4 text-stone-400 font-medium">→ Canonical form</th>
+                        <th className="text-left py-1.5 text-stone-400 font-medium">Why</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-50">
+                      {[
+                        ["sojasaus",       "soy sauce",     "Dutch for soy sauce — Jaccard token overlap without alias is near zero"],
+                        ["gen’en / genen", "reduced salt",  "減塩 — Kikkoman Gen’en line; triggers the QUALIFIER_TERMS reduced-salt hard stop"],
+                        ["healthy boy",    "dek som boon",  "Same Thai brand, different-language name; brand-conflict detection works correctly after alias"],
+                      ].map(([raw, canon, why]) => (
+                        <tr key={raw}>
+                          <td className="py-2 pr-4 font-mono text-stone-700 align-top">{raw}</td>
+                          <td className="py-2 pr-4 font-mono text-teal-700 align-top">{canon}</td>
+                          <td className="py-2 text-stone-400 align-top leading-relaxed">{why}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-stone-600 leading-relaxed">
+                <span className="font-bold text-amber-700">Note — KIKKOMAN_PRODUCT_TERMS (not in the alias table above):</span>{" "}
+                <span className="font-mono">koikuchi shoyu</span> (濃口醤油) is a generic Japanese product-type term that any brand may use.
+                A global alias to <em>kikkoman soy sauce</em> would silently inject &ldquo;kikkoman&rdquo; into
+                a name like <span className="font-mono bg-white border border-stone-100 px-1 rounded">Yamasa Koikuchi Shoyu</span>,
+                causing brand-conflict detection to fail. Instead it lives in a separate{" "}
+                <span className="font-mono">KIKKOMAN_PRODUCT_TERMS</span> list that is only consulted when
+                no other known brand is already present in the name.
+              </div>
+            </div>
+
+            {/* Hard stops diagram */}
+            <div className="border border-red-100 rounded-xl overflow-hidden">
+              <div className="bg-red-50 px-5 py-3 border-b border-red-100">
+                <span className="text-xs font-bold text-red-700 uppercase tracking-wide">Hard stops — any one → IS_MATCH = False (regardless of image score)</span>
+              </div>
+              <div className="p-4 bg-white">
+                <svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" role="img" className="w-full">
+                  <title>Hard stop decision flow</title>
+                  <desc>Flowchart showing four sequential hard stop checks that each veto a product pair match before the image score is consulted.</desc>
+                  <rect width="720" height="400" fill="#fafaf9" rx="12"/>
+                  {/* Title */}
+                  <text x="360" y="30" textAnchor="middle" fontSize="13" fontWeight="700" fill="#1c1917" fontFamily="ui-sans-serif,sans-serif">hard_stop — Domain-Knowledge Gates</text>
+                  <text x="360" y="48" textAnchor="middle" fontSize="10.5" fill="#a8a29e" fontFamily="ui-sans-serif,sans-serif">Any single veto disqualifies the pair regardless of image score</text>
+                  {/* Entry box */}
+                  <rect x="10" y="68" width="88" height="42" rx="8" fill="#e7e5e4" stroke="#d6d3d1" strokeWidth="1.2"/>
+                  <text x="54" y="85" textAnchor="middle" fontSize="10" fill="#57534e" fontFamily="ui-sans-serif,sans-serif">Name pair</text>
+                  <text x="54" y="101" textAnchor="middle" fontSize="9" fill="#78716c" fontFamily="ui-sans-serif,sans-serif">A ↔ B</text>
+                  <line x1="98" y1="89" x2="118" y2="89" stroke="#a8a29e" strokeWidth="1.5" markerEnd="url(#arr)"/>
+                  {/* Gate 1 */}
+                  <rect x="118" y="62" width="128" height="54" rx="8" fill="#fff7ed" stroke="#fed7aa" strokeWidth="1.5"/>
+                  <text x="182" y="80" textAnchor="middle" fontSize="10" fontWeight="700" fill="#c2410c" fontFamily="ui-sans-serif,sans-serif">EXCLUSIVE_PAIRS</text>
+                  <text x="182" y="95" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">dark ↔ light</text>
+                  <text x="182" y="108" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">sweet ↔ tamari  …</text>
+                  <line x1="246" y1="89" x2="266" y2="89" stroke="#a8a29e" strokeWidth="1.5" markerEnd="url(#arr)"/>
+                  <text x="256" y="84" textAnchor="middle" fontSize="8.5" fill="#a8a29e" fontFamily="ui-sans-serif,sans-serif">pass</text>
+                  {/* Gate 2 */}
+                  <rect x="266" y="62" width="128" height="54" rx="8" fill="#fff7ed" stroke="#fed7aa" strokeWidth="1.5"/>
+                  <text x="330" y="80" textAnchor="middle" fontSize="10" fontWeight="700" fill="#c2410c" fontFamily="ui-sans-serif,sans-serif">QUALIFIER_TERMS</text>
+                  <text x="330" y="95" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">tamari / gyoza / ponzu</text>
+                  <text x="330" y="108" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">reduced salt  …</text>
+                  <line x1="394" y1="89" x2="414" y2="89" stroke="#a8a29e" strokeWidth="1.5" markerEnd="url(#arr)"/>
+                  <text x="404" y="84" textAnchor="middle" fontSize="8.5" fill="#a8a29e" fontFamily="ui-sans-serif,sans-serif">pass</text>
+                  {/* Gate 3 */}
+                  <rect x="414" y="62" width="120" height="54" rx="8" fill="#fff7ed" stroke="#fed7aa" strokeWidth="1.5"/>
+                  <text x="474" y="80" textAnchor="middle" fontSize="10" fontWeight="700" fill="#c2410c" fontFamily="ui-sans-serif,sans-serif">Volume</text>
+                  <text x="474" y="95" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">150 ml ≠ 1 L</text>
+                  <text x="474" y="108" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">diff &gt; 5% → veto</text>
+                  <line x1="534" y1="89" x2="554" y2="89" stroke="#a8a29e" strokeWidth="1.5" markerEnd="url(#arr)"/>
+                  <text x="544" y="84" textAnchor="middle" fontSize="8.5" fill="#a8a29e" fontFamily="ui-sans-serif,sans-serif">pass</text>
+                  {/* Gate 4 */}
+                  <rect x="554" y="62" width="120" height="54" rx="8" fill="#fff7ed" stroke="#fed7aa" strokeWidth="1.5"/>
+                  <text x="614" y="80" textAnchor="middle" fontSize="10" fontWeight="700" fill="#c2410c" fontFamily="ui-sans-serif,sans-serif">Brand conflict</text>
+                  <text x="614" y="95" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">Kikkoman ≠ Yamasa</text>
+                  <text x="614" y="108" textAnchor="middle" fontSize="9" fill="#9a3412" fontFamily="ui-sans-serif,sans-serif">_detect_brands()</text>
+                  {/* Veto arrows */}
+                  <line x1="182" y1="116" x2="182" y2="155" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="3 2" markerEnd="url(#arrRed)"/>
+                  <line x1="330" y1="116" x2="330" y2="155" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="3 2" markerEnd="url(#arrRed)"/>
+                  <line x1="474" y1="116" x2="474" y2="155" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="3 2" markerEnd="url(#arrRed)"/>
+                  <line x1="614" y1="116" x2="614" y2="155" stroke="#ef4444" strokeWidth="1.4" strokeDasharray="3 2" markerEnd="url(#arrRed)"/>
+                  <text x="198" y="140" fontSize="8.5" fill="#ef4444" fontFamily="ui-sans-serif,sans-serif">veto</text>
+                  <text x="346" y="140" fontSize="8.5" fill="#ef4444" fontFamily="ui-sans-serif,sans-serif">veto</text>
+                  <text x="490" y="140" fontSize="8.5" fill="#ef4444" fontFamily="ui-sans-serif,sans-serif">veto</text>
+                  <text x="630" y="140" fontSize="8.5" fill="#ef4444" fontFamily="ui-sans-serif,sans-serif">veto</text>
+                  {/* IS_MATCH=False bar */}
+                  <rect x="100" y="155" width="580" height="38" rx="8" fill="#fee2e2" stroke="#fca5a5" strokeWidth="1.2"/>
+                  <text x="390" y="170" textAnchor="middle" fontSize="11" fontWeight="700" fill="#dc2626" fontFamily="ui-monospace,monospace">IS_MATCH = False</text>
+                  <text x="390" y="185" textAnchor="middle" fontSize="9.5" fill="#b91c1c" fontFamily="ui-sans-serif,sans-serif">image score never consulted — domain knowledge overrides vision</text>
+                  {/* All pass branch */}
+                  <text x="688" y="89" textAnchor="middle" fontSize="8.5" fill="#16a34a" fontFamily="ui-sans-serif,sans-serif">all</text>
+                  <text x="688" y="100" textAnchor="middle" fontSize="8.5" fill="#16a34a" fontFamily="ui-sans-serif,sans-serif">pass</text>
+                  <line x1="674" y1="89" x2="706" y2="89" stroke="#16a34a" strokeWidth="1.4"/>
+                  <line x1="706" y1="89" x2="706" y2="230" stroke="#16a34a" strokeWidth="1.4"/>
+                  <line x1="706" y1="230" x2="570" y2="230" stroke="#16a34a" strokeWidth="1.4" markerEnd="url(#arrGreen)"/>
+                  {/* Image score box */}
+                  <rect x="290" y="215" width="278" height="44" rx="8" fill="#f0fdf4" stroke="#86efac" strokeWidth="1.5"/>
+                  <text x="429" y="233" textAnchor="middle" fontSize="10" fontWeight="700" fill="#15803d" fontFamily="ui-monospace,monospace">image_score ≥ threshold?</text>
+                  <text x="429" y="249" textAnchor="middle" fontSize="9" fill="#16a34a" fontFamily="ui-sans-serif,sans-serif">√(DINOv2 × colour_hist) vs 0.60 / 0.80</text>
+                  {/* Yes / No branches */}
+                  <line x1="369" y1="259" x2="310" y2="290" stroke="#16a34a" strokeWidth="1.4" markerEnd="url(#arrGreen)"/>
+                  <text x="323" y="277" fontSize="8.5" fill="#16a34a" fontFamily="ui-sans-serif,sans-serif">yes</text>
+                  <line x1="489" y1="259" x2="548" y2="290" stroke="#ef4444" strokeWidth="1.4" markerEnd="url(#arrRed)"/>
+                  <text x="525" y="277" fontSize="8.5" fill="#ef4444" fontFamily="ui-sans-serif,sans-serif">no</text>
+                  {/* IS_MATCH True */}
+                  <rect x="192" y="290" width="170" height="42" rx="8" fill="#dcfce7" stroke="#86efac" strokeWidth="1.5"/>
+                  <text x="277" y="309" textAnchor="middle" fontSize="11.5" fontWeight="700" fill="#15803d" fontFamily="ui-monospace,monospace">IS_MATCH = True</text>
+                  <text x="277" y="324" textAnchor="middle" fontSize="9" fill="#16a34a" fontFamily="ui-sans-serif,sans-serif">→ Union-Find → global_product_id</text>
+                  {/* IS_MATCH False (image) */}
+                  <rect x="430" y="290" width="172" height="42" rx="8" fill="#fee2e2" stroke="#fca5a5" strokeWidth="1.2"/>
+                  <text x="516" y="309" textAnchor="middle" fontSize="11.5" fontWeight="700" fill="#dc2626" fontFamily="ui-monospace,monospace">IS_MATCH = False</text>
+                  <text x="516" y="324" textAnchor="middle" fontSize="9" fill="#b91c1c" fontFamily="ui-sans-serif,sans-serif">score below threshold</text>
+                  {/* Arrow defs */}
+                  <defs>
+                    <marker id="arr" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 Z" fill="#a8a29e"/>
+                    </marker>
+                    <marker id="arrRed" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 Z" fill="#ef4444"/>
+                    </marker>
+                    <marker id="arrGreen" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 Z" fill="#16a34a"/>
+                    </marker>
+                  </defs>
+                </svg>
+              </div>
+            </div>
+
+            {/* Hard stops detail panels */}
+            <div className="border border-red-100 rounded-xl overflow-hidden">
+              <div className="bg-red-50 px-5 py-3 border-b border-red-100">
+                <span className="text-xs font-bold text-red-700 uppercase tracking-wide">Hard stops — any one → IS_MATCH = False (regardless of image score)</span>
+              </div>
+              <div className="p-5 space-y-4">
+                {[
+                  {
+                    name: "EXCLUSIVE_PAIRS",
+                    color: "bg-red-50 border-red-200 text-red-800",
+                    how: "12 pairs of mutually exclusive product-type terms. If name A contains one term and name B contains its opposite, they cannot be the same product.",
+                    examples: [
+                      ["dark", "light"],
+                      ["sweet", "tamari"],
+                      ["usukuchi", "koikuchi"],
+                      ["asin", "manis"],
+                    ],
+                  },
+                  {
+                    name: "QUALIFIER_TERMS",
+                    color: "bg-orange-50 border-orange-200 text-orange-800",
+                    how: "13 use-specific qualifiers. If one name contains the qualifier and the other does not, the products serve different purposes.",
+                    examples: [
+                      ["tamari", "—"],
+                      ["gyoza", "—"],
+                      ["ponzu", "—"],
+                      ["reduced salt", "—"],
+                    ],
+                  },
+                  {
+                    name: "Volume mismatch",
+                    color: "bg-yellow-50 border-yellow-200 text-yellow-800",
+                    how: "Both names specify a volume (ml or L) and they differ by more than 5%. Different sizes = different SKUs even if the product type is identical.",
+                    examples: [["150ml", "1L"], ["250ml", "300ml"]],
+                  },
+                  {
+                    name: "Brand conflict",
+                    color: "bg-rose-50 border-rose-200 text-rose-800",
+                    how: "Both names resolve to different known brands after alias normalisation. Different brands = definitely different products.",
+                    examples: [["kikkoman", "yamasa"], ["kikkoman", "lee kum kee"]],
+                  },
+                ].map((hs) => (
+                  <div key={hs.name} className={`border rounded-lg p-4 space-y-2 ${hs.color}`}>
+                    <p className="text-xs font-bold font-mono">{hs.name}</p>
+                    <p className="text-xs leading-relaxed opacity-80">{hs.how}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {hs.examples.map(([a, b]) => (
+                        <span key={a} className="text-xs bg-white bg-opacity-60 border border-current border-opacity-20 rounded px-2 py-0.5 font-mono">
+                          {b === "—" ? `"${a}"` : `"${a}" vs "${b}"`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Adaptive threshold */}
+            <div className="border border-teal-100 rounded-xl overflow-hidden">
+              <div className="bg-teal-50 px-5 py-3 border-b border-teal-100">
+                <span className="text-xs font-bold text-teal-700 uppercase tracking-wide">Adaptive threshold — name lowers the bar when it confirms a match</span>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  If no hard stop fires, the match threshold adapts based on how much structural text confirmation exists.
+                  The same brand + the same volume is strong evidence the two listings are the same SKU.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-1">
+                    <p className="text-xs font-bold text-stone-600 uppercase tracking-wide">Default threshold</p>
+                    <p className="text-3xl font-bold text-stone-800 font-mono">0.80</p>
+                    <p className="text-xs text-stone-500">
+                      Brand or volume not both confirmed. Calibrated from data: a known match
+                      (two Yamasa 150ml listings with different names) scores ~0.81.
+                    </p>
+                  </div>
+                  <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-1">
+                    <p className="text-xs font-bold text-teal-700 uppercase tracking-wide">Confirmed threshold</p>
+                    <p className="text-3xl font-bold text-teal-700 font-mono">0.60</p>
+                    <p className="text-xs text-stone-500">
+                      Same brand <strong>and</strong> same volume both detected. Same SKU photographed at different
+                      angles or labelled in a different language scores 0.55–0.70 and can still match.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Full decision formula */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <h4 className="font-semibold text-stone-900">Full decision formula</h4>
+            <div className="bg-stone-900 rounded-xl p-5 space-y-3 text-white font-mono text-sm">
+              <p className="text-stone-400 text-xs"># 1. Preprocess both images</p>
+              <p>img = remove_background(img) → remove_dark_liquid(img)</p>
+              <p className="text-stone-400 text-xs mt-3"># 2. Compute image score</p>
+              <p>dino_score  = cos( DINOv2_CLS(img_A), DINOv2_CLS(img_B) )</p>
+              <p>color_score = cos( RGB_hist(coloured_pixels_A), RGB_hist(coloured_pixels_B) )</p>
+              <p>image_score = √( dino_score × color_score )</p>
+              <p className="text-stone-400 text-xs mt-3"># 3. Text hard stops — brand detection via _detect_brands() (NAME_ALIASES + KIKKOMAN_PRODUCT_TERMS)</p>
+              <p>hard_stop = (</p>
+              <p className="pl-6">EXCLUSIVE_PAIRS conflict in names  <span className="text-red-400">→ veto</span></p>
+              <p className="pl-4">OR QUALIFIER_TERMS asymmetry in names  <span className="text-red-400">→ veto</span></p>
+              <p className="pl-4">OR volume extracted from A ≠ volume from B (±5%)  <span className="text-red-400">→ veto</span></p>
+              <p className="pl-4">OR different known brands detected  <span className="text-red-400">→ veto</span></p>
+              <p>)</p>
+              <p className="text-stone-400 text-xs mt-3"># 4. Adaptive threshold</p>
+              <p>threshold = 0.60 if (same_brand AND same_volume) else 0.80</p>
+              <p className="text-stone-400 text-xs mt-3"># 5. Final decision</p>
+              <p className="text-green-400">IS_MATCH = (not hard_stop) AND (image_score ≥ threshold)</p>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-xl p-5 space-y-2">
+              <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">Real example — Koikuchi Shoyu 150ml vs Kikkoman Soy Sauce 150ml</p>
+              <div className="text-xs text-stone-600 space-y-1 leading-relaxed">
+                <p>① Preprocessed images → background white, liquid white</p>
+                <p>② dino_score ≈ 0.72 · color_score ≈ 0.42 → image_score = √(0.72 × 0.42) ≈ <strong>0.55</strong></p>
+                <p>③ <em>_detect_brands(&ldquo;Koikuchi Shoyu 150ML&rdquo;)</em>: no explicit brand found in name → secondary pass: &ldquo;koikuchi shoyu&rdquo; in <span className="font-mono bg-white border border-stone-100 px-1 rounded">KIKKOMAN_PRODUCT_TERMS</span> → brands = &#123;kikkoman&#125;. No EXCLUSIVE_PAIR, QUALIFIER, or volume mismatch → <strong>hard_stop = False</strong></p>
+                <p>④ same brand (kikkoman) AND same volume (150ml) → <strong>threshold = 0.60</strong></p>
+                <p>⑤ 0.55 ≥ 0.60? <strong className="text-red-600">No → IS_MATCH = False</strong> for this direct pair, but Union-Find transitivity via two higher-scoring pairs (0.61 and 0.73) pulls all four shops into the same <span className="font-mono bg-white border border-stone-100 px-1 rounded">global_product_id</span>.</p>
+                <p className="text-stone-400 mt-1">Contrast: <em>_detect_brands(&ldquo;Yamasa Koikuchi Shoyu 150ml&rdquo;)</em> → &ldquo;yamasa&rdquo; found in primary pass → secondary pass skipped → brands = &#123;yamasa&#125; → brand conflict vs Kikkoman fires correctly.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Union-Find */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-4">
+            <h4 className="font-semibold text-stone-900">Step D — Union-Find clustering → global_product_id</h4>
+            <p className="text-sm text-stone-500 leading-relaxed">
+              All <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">IS_MATCH=True</span> pairs
+              are fed into a Union-Find data structure. Transitivity is handled automatically: if A↔B and B↔C
+              both match, all three are merged into one cluster even if A↔C was never directly compared or scored
+              below threshold. Each cluster receives a <strong>deterministic UUID5</strong> keyed on the
+              lexicographic root node string — the same cluster always produces the same UUID across reruns, so
+              downstream tables remain stable when new scrape dates are added.
+            </p>
+            <div className="bg-stone-50 rounded-xl p-4 space-y-2 font-mono text-xs text-stone-600">
+              <p>Shilla Market — Koikuchi Shoyu 150ML     ↔ Toko Asia — KIKKOMAN SOY SAUCE 150ML  (0.73 ✓)</p>
+              <p>Toko Asia — KIKKOMAN SOY SAUCE 150ML     ↔ Tjin&apos;s Toko — Soy Sauce 150ml       (0.61 ✓)</p>
+              <p>Tjin&apos;s Toko — Soy Sauce 150ml          ↔ Tjin&apos;s Toko — Pour Bottle 150ml       (same shop — skipped)</p>
+              <p className="mt-2 text-green-700">→ Union-Find: all 4 listings → global_product_id = 9458878e-b263-50f2-8f51-6d15a4e7f8fc</p>
+            </div>
+          </div>
+        </section>
+
         {/* dbt Data Quality — Step 6 */}
         {dbt && (
           <section className="space-y-5">
