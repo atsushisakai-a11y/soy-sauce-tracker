@@ -71,13 +71,18 @@ def get_bq_client() -> bigquery.Client:
 
 
 def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return all distinct cross-shop pairs that have image URLs on both sides."""
+    """Return distinct cross-shop pairs from the most recent scrape date only.
+
+    Using MAX(SCRAPE_DATE) avoids pulling the same product pair once per scrape
+    date (which inflates pair count ~10x without adding new information).
+    """
     rows = client.query(f"""
         SELECT DISTINCT
             SHOP_NAME_1,    PRODUCT_NAME_1,    IMAGE_URL_1,
             SHOP_NAME_2,    PRODUCT_NAME_2,    IMAGE_URL_2
         FROM `{SIMILARITY_TABLE}`
-        WHERE SHOP_NAME_1 != SHOP_NAME_2
+        WHERE SCRAPE_DATE = (SELECT MAX(SCRAPE_DATE) FROM `{SIMILARITY_TABLE}`)
+          AND SHOP_NAME_1 != SHOP_NAME_2
           AND IMAGE_URL_1 IS NOT NULL AND IMAGE_URL_1 != ''
           AND IMAGE_URL_2 IS NOT NULL AND IMAGE_URL_2 != ''
         ORDER BY SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2
