@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 
 GCP_PROJECT      = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
 SIMILARITY_TABLE = f"{GCP_PROJECT}.staging.staging_similarity_scores"
-GROQ_MODEL       = "llama-3.2-11b-vision-preview"
+GROQ_MODEL       = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 OUTPUT_PATH    = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
 UNCERTAIN_PATH = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
