@@ -78,18 +78,37 @@ def detect_brand(product_name: str, brand_keywords: list[tuple[str, str]]) -> st
 # ---------------------------------------------------------------------------
 
 def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return distinct cross-shop pairs from the most recent scrape, one direction only."""
+    """Return distinct cross-shop pairs from the most recent scrape, one direction only.
+
+    Filters to same-volume pairs with normalised units (1l/1liter → 1000ml)
+    to avoid trivially different pairs like 150ml vs 1L consuming Groq quota.
+    """
     rows = client.query(f"""
+        WITH products AS (
+            SELECT
+                SHOP_NAME,
+                PRODUCT_NAME,
+                CASE
+                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), r'\\d+\\s*(?:liter|litre|l\\b)')
+                    THEN CAST(
+                        CAST(REGEXP_EXTRACT(PRODUCT_NAME, r'(\\d+)\\s*(?:[Ll]iter|[Ll]itre|[Ll]\\b)') AS INT64) * 1000
+                        AS STRING) || 'ml'
+                    ELSE REGEXP_REPLACE(
+                        REGEXP_EXTRACT(LOWER(PRODUCT_NAME), r'\\d+\\s*(?:ml|g\\b|kg)'),
+                        r'\\s', '')
+                END AS volume
+            FROM `{RAW_TABLE}`
+            WHERE SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
+        )
         SELECT DISTINCT
             a.SHOP_NAME    AS SHOP_NAME_1,
             a.PRODUCT_NAME AS PRODUCT_NAME_1,
             b.SHOP_NAME    AS SHOP_NAME_2,
             b.PRODUCT_NAME AS PRODUCT_NAME_2
-        FROM `{RAW_TABLE}` a
-        JOIN `{RAW_TABLE}` b
-            ON a.SCRAPED_AT = b.SCRAPED_AT
+        FROM products a
+        JOIN products b
+            ON a.volume = b.volume
            AND a.SHOP_NAME < b.SHOP_NAME
-        WHERE a.SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
         ORDER BY a.SHOP_NAME, a.PRODUCT_NAME, b.SHOP_NAME
     """).result()
     return [dict(row) for row in rows]
