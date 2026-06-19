@@ -89,6 +89,21 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
                 SHOP_NAME,
                 PRODUCT_NAME,
                 CASE
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%kikkoman%'        THEN 'KIKKOMAN'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%lee kum kee%'     THEN 'LEE KUM KEE'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%pearl river bridge%' THEN 'PEARL RIVER BRIDGE'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%mee chun%'        THEN 'MEE CHUN'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%healthy boy%'     THEN 'HEALTHY BOY'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%yamasa%'          THEN 'YAMASA'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%sempio%'          THEN 'SEMPIO'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%silver swan%'     THEN 'SILVER SWAN'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%dek som boon%'    THEN 'DEK SOM BOON'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%marukin%'         THEN 'MARUKIN'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%abc%'             THEN 'ABC'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%hb %'             THEN 'HEALTHY BOY'
+                    ELSE 'UNKNOWN'
+                END AS brand,
+                CASE
                     WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(?:liter|litre)')
                         THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*(?:liter|litre)') AS INT64) * 1000 AS STRING) || 'ml'
                     WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*l[^a-z]')
@@ -103,12 +118,15 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
         SELECT DISTINCT
             a.SHOP_NAME    AS SHOP_NAME_1,
             a.PRODUCT_NAME AS PRODUCT_NAME_1,
+            a.brand        AS BRAND,
             b.SHOP_NAME    AS SHOP_NAME_2,
             b.PRODUCT_NAME AS PRODUCT_NAME_2
         FROM products a
         JOIN products b
-            ON a.volume = b.volume
+            ON a.brand  = b.brand
+           AND a.volume = b.volume
            AND a.SHOP_NAME < b.SHOP_NAME
+        WHERE a.brand != 'UNKNOWN'
         ORDER BY a.SHOP_NAME, a.PRODUCT_NAME, b.SHOP_NAME
     """).result()
     return [dict(row) for row in rows]
@@ -185,37 +203,8 @@ def run() -> None:
     brand_keywords = load_brand_keywords(BRAND_LIST_PATH)
 
     log.info("Fetching cross-shop pairs from BigQuery…")
-    all_pairs = fetch_pairs(bq_client)
-    log.info("Total cross-shop pairs: %d", len(all_pairs))
-
-    # Brand filter: keep only same-brand pairs
-    if brand_keywords:
-        same_brand_pairs = []
-        skipped_diff_brand = 0
-        skipped_unknown    = 0
-        for p in all_pairs:
-            b1 = detect_brand(p["PRODUCT_NAME_1"], brand_keywords)
-            b2 = detect_brand(p["PRODUCT_NAME_2"], brand_keywords)
-            if b1 == "UNKNOWN" or b2 == "UNKNOWN":
-                skipped_unknown += 1
-            elif b1 != b2:
-                skipped_diff_brand += 1
-            else:
-                p["BRAND_1"] = b1
-                p["BRAND_2"] = b2
-                same_brand_pairs.append(p)
-        log.info(
-            "After brand filter → %d same-brand pairs  "
-            "(skipped: %d different-brand, %d unknown-brand)",
-            len(same_brand_pairs), skipped_diff_brand, skipped_unknown,
-        )
-        pairs_to_evaluate = same_brand_pairs
-    else:
-        # No brand list — fall back to all pairs
-        for p in all_pairs:
-            p["BRAND_1"] = ""
-            p["BRAND_2"] = ""
-        pairs_to_evaluate = all_pairs
+    pairs_to_evaluate = fetch_pairs(bq_client)
+    log.info("Same-brand same-volume pairs to evaluate: %d", len(pairs_to_evaluate))
 
     # Step 3 — Resume: skip already-processed pairs
     done = load_done_pairs(OUTPUT_PATH) | load_done_pairs(UNCERTAIN_PATH)
@@ -238,7 +227,7 @@ def run() -> None:
         for i, pair in enumerate(pairs, 1):
             shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"]
             shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"]
-            brand  = pair.get("BRAND_1", "")
+            brand  = pair.get("BRAND", "")
 
             log.info("[%d/%d] [%s] %s  ↔  [%s] %s",
                      i, len(pairs), shop_a, name_a, shop_b, name_b)
