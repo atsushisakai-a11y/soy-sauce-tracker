@@ -1,4 +1,4 @@
-name: 92. Generate Ground Truth (Groq Vision Oracle)
+name: 92. Generate Ground Truth (Groq Oracle)
 
 on:
   workflow_dispatch:
@@ -24,15 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install groq google-cloud-bigquery python-dotenv
 
-      # Step 1 — Brand list (skipped if brand_list.csv already committed to repo)
-      - name: Generate brand list (Step 1)
-        if: ${{ !hashFiles('similarity/brand_list.csv') }}
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python similarity/generate_brand_list.py
-
-      # Step 2-4 — Ground truth with same-brand filtering
-      - name: Generate ground truth (Steps 2–4)
+      - name: Generate ground truth
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python similarity/generate_ground_truth.py

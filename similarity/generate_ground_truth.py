@@ -5,15 +5,16 @@ Optimization vs naive all-pairs approach:
   Naive: 4,520 cross-shop pairs → exhausts Groq free-tier token budget in one run.
   Optimised: filter to same-brand pairs first → typically 5–10% of all pairs.
 
-  Step 1 — Brand tagging (one-time):
-      Run generate_brand_list.py to produce brand_list.csv.
-      Each product name is mapped to a canonical brand (e.g. "KIKKOMAN").
+  Brand filtering uses keyword matching against brand_list.csv (brand + keyword columns).
+  A product name containing "kikkoman" → KIKKOMAN, "hb" → HEALTHY BOY, etc.
+  New products are matched automatically without updating brand_list.csv, as long as
+  the brand keyword appears somewhere in the product name.
 
-  Step 2 — Brand filtering (this script):
+  Step 1 — Brand filtering (this script):
       Only pairs where both products share the same known brand are evaluated.
       A KIKKOMAN vs LEE KUM KEE pair is trivially DIFFERENT — no LLM call needed.
 
-  Step 3 — Similarity evaluation (this script):
+  Step 2 — Similarity evaluation (this script):
       Send the filtered same-brand pairs to Llama 4 Scout (text-only, ~180 tok/call).
 
 Resume/checkpoint:
@@ -52,16 +53,24 @@ RATE_LIMIT_DELAY = 2.1
 
 
 # ---------------------------------------------------------------------------
-# Brand list
+# Brand detection via keyword matching
 # ---------------------------------------------------------------------------
 
-def load_brand_lookup(path: str) -> dict[str, str]:
-    """Load brand_list.csv → {product_name: brand}. Returns {} if file missing."""
+def load_brand_keywords(path: str) -> list[tuple[str, str]]:
+    """Load brand_list.csv → [(brand, keyword), ...]. Returns [] if file missing."""
     if not os.path.exists(path):
         log.warning("brand_list.csv not found at %s — running without brand filter.", path)
-        return {}
+        return []
     with open(path, newline="", encoding="utf-8") as f:
-        return {row["product_name"]: row["brand"] for row in csv.DictReader(f)}
+        return [(row["brand"], row["keyword"].lower()) for row in csv.DictReader(f)]
+
+
+def detect_brand(product_name: str, brand_keywords: list[tuple[str, str]]) -> str:
+    name_lower = product_name.lower()
+    for brand, keyword in brand_keywords:
+        if keyword in name_lower:
+            return brand
+    return "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
@@ -148,22 +157,22 @@ def judge_pair(client: Groq, shop_a: str, name_a: str, shop_b: str, name_b: str)
 # ---------------------------------------------------------------------------
 
 def run() -> None:
-    bq_client     = bigquery.Client(project=GCP_PROJECT)
-    client        = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    brand_lookup  = load_brand_lookup(BRAND_LIST_PATH)
+    bq_client      = bigquery.Client(project=GCP_PROJECT)
+    client         = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    brand_keywords = load_brand_keywords(BRAND_LIST_PATH)
 
     log.info("Fetching cross-shop pairs from BigQuery…")
     all_pairs = fetch_pairs(bq_client)
     log.info("Total cross-shop pairs: %d", len(all_pairs))
 
-    # Step 2 — Brand filter: keep only same-brand pairs
-    if brand_lookup:
+    # Brand filter: keep only same-brand pairs
+    if brand_keywords:
         same_brand_pairs = []
         skipped_diff_brand = 0
         skipped_unknown    = 0
         for p in all_pairs:
-            b1 = brand_lookup.get(p["PRODUCT_NAME_1"], "UNKNOWN")
-            b2 = brand_lookup.get(p["PRODUCT_NAME_2"], "UNKNOWN")
+            b1 = detect_brand(p["PRODUCT_NAME_1"], brand_keywords)
+            b2 = detect_brand(p["PRODUCT_NAME_2"], brand_keywords)
             if b1 == "UNKNOWN" or b2 == "UNKNOWN":
                 skipped_unknown += 1
             elif b1 != b2:
