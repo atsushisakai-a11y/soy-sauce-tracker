@@ -89,13 +89,13 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
                 SHOP_NAME,
                 PRODUCT_NAME,
                 CASE
-                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(liter|litre)')
-                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*(liter|litre)') AS INT64) * 1000 AS STRING) || 'ml'
+                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(?:liter|litre)')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*(?:liter|litre)') AS INT64) * 1000 AS STRING) || 'ml'
                     WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*l[^a-z]')
                         THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*l[^a-z]') AS INT64) * 1000 AS STRING) || 'ml'
                     WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*l$')
                         THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*l$') AS INT64) * 1000 AS STRING) || 'ml'
-                    ELSE REGEXP_REPLACE(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(ml|kg|g)'), '[ ]', '')
+                    ELSE REGEXP_REPLACE(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(?:ml|kg|g)'), '[ ]', '')
                 END AS volume
             FROM `{RAW_TABLE}`
             WHERE SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
