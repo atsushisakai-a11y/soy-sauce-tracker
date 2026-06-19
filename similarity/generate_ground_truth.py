@@ -1,45 +1,35 @@
 """
-Generate ground_truth.csv using Groq (Llama 3.2 Vision) as an independent oracle.
+Generate ground_truth.csv using Groq (Llama 4 Scout) as an independent text oracle.
+
+Why text-only (no images)?
+  Vision calls consume ~55,000 tokens each on Groq's free tier (500K tokens/day limit),
+  which allows only ~9 pairs per day. Text-only calls use ~180 tokens each (~2,700/day).
+  Product names already carry brand, volume, and product type — sufficient for most pairs.
+
+Resume/checkpoint support:
+  Pairs already written to ground_truth.csv or ground_truth_uncertain.csv are skipped
+  on re-run. Run the workflow on consecutive days to cover all pairs incrementally.
 
 Flow:
   1. Read all distinct cross-shop pairs from STAGING.STAGING_SIMILARITY_SCORES
-     (most recent scrape date only — avoids repeating the same pairs per date)
-  2. For each pair, download both product images as base64 JPEG
-  3. Send product names + images to Llama 3.2 Vision via Groq for judgment
-     — completely separate from the DINOv2 / colour-histogram pipeline
-  4. Write SAME / DIFFERENT pairs to ground_truth.csv
-  5. Write UNCERTAIN pairs to ground_truth_uncertain.csv for manual review
-
-Why Groq / Llama 3.2 Vision as oracle?
-  DINOv2 reasons about pixel-level visual structure. Llama Vision reasons about
-  semantic product identity (brand marks, label text, product type, volume).
-  Genuinely independent signals → valid ground truth for Recall / Precision / F1.
-
-  Groq free tier: ~30 RPM for vision models — sufficient for ~500 pairs in <30 min.
-  Uses the same GROQ_API_KEY already in use by the Telegram bot scoring pipeline.
-
-Output files:
-  ground_truth.csv           — SAME and DIFFERENT verdicts (labelled ground truth)
-  ground_truth_uncertain.csv — pairs the model could not confidently judge
+     (most recent scrape date only)
+  2. Skip pairs already processed in existing output CSVs (checkpoint/resume)
+  3. For each remaining pair, ask Llama 4 Scout via Groq for a SAME/DIFFERENT/UNCERTAIN verdict
+  4. Append results to ground_truth.csv (SAME + DIFFERENT) and ground_truth_uncertain.csv
 
 Usage:
-    pip install groq google-cloud-bigquery python-dotenv Pillow requests
+    pip install groq google-cloud-bigquery python-dotenv requests
     GROQ_API_KEY=<key> python similarity/generate_ground_truth.py
 """
 
-import ast
-import base64
 import csv
-import io
 import logging
 import os
 import time
 
-import requests
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from groq import Groq
-from PIL import Image
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -53,15 +43,11 @@ GROQ_MODEL       = "meta-llama/llama-4-scout-17b-16e-instruct"
 OUTPUT_PATH    = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
 UNCERTAIN_PATH = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
-TIMEOUT          = 15
-RATE_LIMIT_DELAY = 2.1  # ~30 RPM free tier → stay safely under 1 req/2s
+FIELDNAMES = ["shop_name_1", "product_name_1", "shop_name_2", "product_name_2", "verdict"]
+
+# Groq free tier: 500K tokens/day. Text-only calls use ~180 tokens each → ~2,700 pairs/day.
+# Use a 2s delay to stay well under 30 RPM.
+RATE_LIMIT_DELAY = 2.1
 
 
 # ---------------------------------------------------------------------------
@@ -76,56 +62,44 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
     """Return distinct cross-shop pairs from the most recent scrape date only."""
     rows = client.query(f"""
         SELECT DISTINCT
-            SHOP_NAME_1,    PRODUCT_NAME_1,    IMAGE_URL_1,
-            SHOP_NAME_2,    PRODUCT_NAME_2,    IMAGE_URL_2
+            SHOP_NAME_1, PRODUCT_NAME_1,
+            SHOP_NAME_2, PRODUCT_NAME_2
         FROM `{SIMILARITY_TABLE}`
         WHERE SCRAPE_DATE = (SELECT MAX(SCRAPE_DATE) FROM `{SIMILARITY_TABLE}`)
           AND SHOP_NAME_1 != SHOP_NAME_2
-          AND IMAGE_URL_1 IS NOT NULL AND IMAGE_URL_1 != ''
-          AND IMAGE_URL_2 IS NOT NULL AND IMAGE_URL_2 != ''
         ORDER BY SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2
     """).result()
     return [dict(row) for row in rows]
 
 
 # ---------------------------------------------------------------------------
-# Image helpers
+# Checkpoint / resume
 # ---------------------------------------------------------------------------
 
-def _clean_image_url(url: str) -> str:
-    """Extract a plain URL from values stored as JSON-LD ImageObject strings."""
-    if not url:
-        return ""
-    if url.startswith("http"):
-        return url
-    try:
-        obj = ast.literal_eval(url)
-        if isinstance(obj, dict):
-            return obj.get("url") or obj.get("contentUrl") or obj.get("image", "")
-    except Exception:
-        pass
-    return ""
+def load_done_pairs(path: str) -> set[tuple]:
+    """Return set of (shop1, name1, shop2, name2) already written to path."""
+    done: set[tuple] = set()
+    if not os.path.exists(path):
+        return done
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            done.add((row["shop_name_1"], row["product_name_1"],
+                      row["shop_name_2"], row["product_name_2"]))
+    return done
 
 
-def download_image_b64(url: str) -> str | None:
-    """Download image and return base64-encoded JPEG string, or None on failure."""
-    clean = _clean_image_url(url)
-    if not clean:
-        return None
-    try:
-        r = requests.get(clean, headers=HEADERS, timeout=TIMEOUT)
-        r.raise_for_status()
-        img = Image.open(io.BytesIO(r.content)).convert("RGB")
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG")
-        return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
-    except Exception as e:
-        log.warning("  Image download failed (%s): %s", clean[:60], e)
-        return None
+def open_csv_append(path: str) -> tuple[object, object]:
+    """Open CSV for appending; write header only if file is new/empty."""
+    is_new = not os.path.exists(path) or os.path.getsize(path) == 0
+    f = open(path, "a", newline="", encoding="utf-8")
+    writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+    if is_new:
+        writer.writeheader()
+    return f, writer
 
 
 # ---------------------------------------------------------------------------
-# Groq Vision oracle
+# Groq oracle — text only
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
@@ -142,28 +116,18 @@ Reply with exactly one word:
 Single word only. No explanation."""
 
 
-def _img_part(b64: str) -> dict:
-    return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
-
-
-def judge_pair(
-    client: Groq,
-    shop_a: str, name_a: str, img_a: str | None,
-    shop_b: str, name_b: str, img_b: str | None,
-) -> str:
-    """Ask Llama Vision via Groq whether two products are the same SKU.
-    Returns 'SAME', 'DIFFERENT', or 'UNCERTAIN'."""
-    content: list = [{"type": "text", "text": f"Product A (shop: {shop_a})\nName: {name_a}"}]
-    content.append(_img_part(img_a) if img_a else {"type": "text", "text": "(image unavailable)"})
-    content.append({"type": "text", "text": f"Product B (shop: {shop_b})\nName: {name_b}"})
-    content.append(_img_part(img_b) if img_b else {"type": "text", "text": "(image unavailable)"})
-    content.append({"type": "text", "text": "Are these the same product SKU?"})
-
+def judge_pair(client: Groq, shop_a: str, name_a: str, shop_b: str, name_b: str) -> str:
+    """Ask Llama 4 Scout whether two product names refer to the same SKU."""
+    user_msg = (
+        f"Product A — shop: {shop_a}\nName: {name_a}\n\n"
+        f"Product B — shop: {shop_b}\nName: {name_b}\n\n"
+        "Are these the same product SKU?"
+    )
     response = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": content},
+            {"role": "user",   "content": user_msg},
         ],
         max_tokens=10,
     )
@@ -178,62 +142,72 @@ def judge_pair(
 # Main
 # ---------------------------------------------------------------------------
 
-FIELDNAMES = ["shop_name_1", "product_name_1", "shop_name_2", "product_name_2", "verdict"]
-
-
 def run() -> None:
     bq_client = get_bq_client()
     client    = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     log.info("Fetching cross-shop pairs from BigQuery…")
-    pairs = fetch_pairs(bq_client)
-    log.info("Found %d pairs to evaluate.", len(pairs))
+    all_pairs = fetch_pairs(bq_client)
+    log.info("Total pairs in dataset: %d", len(all_pairs))
 
-    same_rows:      list[dict] = []
-    different_rows: list[dict] = []
-    uncertain_rows: list[dict] = []
+    # Resume: skip pairs already processed
+    done = load_done_pairs(OUTPUT_PATH) | load_done_pairs(UNCERTAIN_PATH)
+    pairs = [
+        p for p in all_pairs
+        if (p["SHOP_NAME_1"], p["PRODUCT_NAME_1"],
+            p["SHOP_NAME_2"], p["PRODUCT_NAME_2"]) not in done
+    ]
+    log.info("Already processed: %d  Remaining: %d", len(done), len(pairs))
 
-    for i, pair in enumerate(pairs, 1):
-        shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"];  url_a = pair["IMAGE_URL_1"]
-        shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"];  url_b = pair["IMAGE_URL_2"]
+    if not pairs:
+        log.info("All pairs already processed. Nothing to do.")
+        return
 
-        log.info("[%d/%d] [%s] %s  ↔  [%s] %s", i, len(pairs), shop_a, name_a, shop_b, name_b)
+    out_f,  out_w  = open_csv_append(OUTPUT_PATH)
+    unc_f,  unc_w  = open_csv_append(UNCERTAIN_PATH)
 
-        img_a   = download_image_b64(url_a)
-        img_b   = download_image_b64(url_b)
-        verdict = judge_pair(client, shop_a, name_a, img_a, shop_b, name_b, img_b)
-        log.info("  → %s", verdict)
+    same = different = uncertain = 0
 
-        row = dict(shop_name_1=shop_a, product_name_1=name_a,
-                   shop_name_2=shop_b, product_name_2=name_b, verdict=verdict)
-        if verdict == "SAME":
-            same_rows.append(row)
-        elif verdict == "DIFFERENT":
-            different_rows.append(row)
-        else:
-            uncertain_rows.append(row)
+    try:
+        for i, pair in enumerate(pairs, 1):
+            shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"]
+            shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"]
 
-        time.sleep(RATE_LIMIT_DELAY)
+            log.info("[%d/%d] [%s] %s  ↔  [%s] %s", i, len(pairs), shop_a, name_a, shop_b, name_b)
 
-    with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(same_rows)
-        writer.writerows(different_rows)
+            verdict = judge_pair(client, shop_a, name_a, shop_b, name_b)
+            log.info("  → %s", verdict)
 
-    with open(UNCERTAIN_PATH, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(uncertain_rows)
+            row = dict(shop_name_1=shop_a, product_name_1=name_a,
+                       shop_name_2=shop_b, product_name_2=name_b, verdict=verdict)
+            if verdict == "UNCERTAIN":
+                unc_w.writerow(row)
+                unc_f.flush()
+                uncertain += 1
+            else:
+                out_w.writerow(row)
+                out_f.flush()
+                if verdict == "SAME":
+                    same += 1
+                else:
+                    different += 1
 
-    log.info(
-        "Done.  SAME=%d  DIFFERENT=%d  UNCERTAIN=%d",
-        len(same_rows), len(different_rows), len(uncertain_rows),
-    )
+            time.sleep(RATE_LIMIT_DELAY)
+
+    finally:
+        out_f.close()
+        unc_f.close()
+
+    log.info("Done.  SAME=%d  DIFFERENT=%d  UNCERTAIN=%d", same, different, uncertain)
     log.info("Ground truth  → %s", OUTPUT_PATH)
     log.info("Manual review → %s", UNCERTAIN_PATH)
     log.info("")
-    log.info("Next step: run evaluate_matching.py to get Precision / Recall / F1")
+    total_done = len(done) + same + different + uncertain
+    log.info("Overall progress: %d / %d pairs labelled", total_done, len(all_pairs))
+    if total_done < len(all_pairs):
+        log.info("Re-run the workflow tomorrow to continue — already-done pairs will be skipped.")
+    else:
+        log.info("All pairs labelled! Run evaluate_matching.py to get Precision / Recall / F1.")
 
 
 if __name__ == "__main__":
