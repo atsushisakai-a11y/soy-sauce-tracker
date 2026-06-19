@@ -1,24 +1,26 @@
 """
-Generate ground_truth.csv using Groq (Llama 4 Scout) as an independent text oracle.
+Generate ground_truth.csv using Groq (Llama 4 Scout) — same-brand pairs only.
 
-Why text-only (no images)?
-  Vision calls consume ~55,000 tokens each on Groq's free tier (500K tokens/day limit),
-  which allows only ~9 pairs per day. Text-only calls use ~180 tokens each (~2,700/day).
-  Product names already carry brand, volume, and product type — sufficient for most pairs.
+Optimization vs naive all-pairs approach:
+  Naive: 4,520 cross-shop pairs → exhausts Groq free-tier token budget in one run.
+  Optimised: filter to same-brand pairs first → typically 5–10% of all pairs.
 
-Resume/checkpoint support:
-  Pairs already written to ground_truth.csv or ground_truth_uncertain.csv are skipped
-  on re-run. Run the workflow on consecutive days to cover all pairs incrementally.
+  Step 1 — Brand tagging (one-time):
+      Run generate_brand_list.py to produce brand_list.csv.
+      Each product name is mapped to a canonical brand (e.g. "KIKKOMAN").
 
-Flow:
-  1. Read all distinct cross-shop pairs from STAGING.STAGING_SIMILARITY_SCORES
-     (most recent scrape date only)
-  2. Skip pairs already processed in existing output CSVs (checkpoint/resume)
-  3. For each remaining pair, ask Llama 4 Scout via Groq for a SAME/DIFFERENT/UNCERTAIN verdict
-  4. Append results to ground_truth.csv (SAME + DIFFERENT) and ground_truth_uncertain.csv
+  Step 2 — Brand filtering (this script):
+      Only pairs where both products share the same known brand are evaluated.
+      A KIKKOMAN vs LEE KUM KEE pair is trivially DIFFERENT — no LLM call needed.
+
+  Step 3 — Similarity evaluation (this script):
+      Send the filtered same-brand pairs to Llama 4 Scout (text-only, ~180 tok/call).
+
+Resume/checkpoint:
+  Results are written immediately. Re-running skips already-processed pairs.
 
 Usage:
-    pip install groq google-cloud-bigquery python-dotenv requests
+    pip install groq google-cloud-bigquery python-dotenv
     GROQ_API_KEY=<key> python similarity/generate_ground_truth.py
 """
 
@@ -40,26 +42,34 @@ GCP_PROJECT      = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
 SIMILARITY_TABLE = f"{GCP_PROJECT}.staging.staging_similarity_scores"
 GROQ_MODEL       = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-OUTPUT_PATH    = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
-UNCERTAIN_PATH = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
+BRAND_LIST_PATH = os.path.join(os.path.dirname(__file__), "brand_list.csv")
+OUTPUT_PATH     = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
+UNCERTAIN_PATH  = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
+FIELDNAMES      = ["shop_name_1", "product_name_1", "brand_1",
+                   "shop_name_2", "product_name_2", "brand_2", "verdict"]
 
-FIELDNAMES = ["shop_name_1", "product_name_1", "shop_name_2", "product_name_2", "verdict"]
-
-# Groq free tier: 500K tokens/day. Text-only calls use ~180 tokens each → ~2,700 pairs/day.
-# Use a 2s delay to stay well under 30 RPM.
 RATE_LIMIT_DELAY = 2.1
+
+
+# ---------------------------------------------------------------------------
+# Brand list
+# ---------------------------------------------------------------------------
+
+def load_brand_lookup(path: str) -> dict[str, str]:
+    """Load brand_list.csv → {product_name: brand}. Returns {} if file missing."""
+    if not os.path.exists(path):
+        log.warning("brand_list.csv not found at %s — running without brand filter.", path)
+        return {}
+    with open(path, newline="", encoding="utf-8") as f:
+        return {row["product_name"]: row["brand"] for row in csv.DictReader(f)}
 
 
 # ---------------------------------------------------------------------------
 # BigQuery
 # ---------------------------------------------------------------------------
 
-def get_bq_client() -> bigquery.Client:
-    return bigquery.Client(project=GCP_PROJECT)
-
-
 def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return distinct cross-shop pairs from the most recent scrape date only."""
+    """Return distinct cross-shop pairs from the most recent scrape date."""
     rows = client.query(f"""
         SELECT DISTINCT
             SHOP_NAME_1, PRODUCT_NAME_1,
@@ -77,25 +87,21 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def load_done_pairs(path: str) -> set[tuple]:
-    """Return set of (shop1, name1, shop2, name2) already written to path."""
-    done: set[tuple] = set()
     if not os.path.exists(path):
-        return done
+        return set()
     with open(path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            done.add((row["shop_name_1"], row["product_name_1"],
-                      row["shop_name_2"], row["product_name_2"]))
-    return done
+        return {(r["shop_name_1"], r["product_name_1"],
+                 r["shop_name_2"], r["product_name_2"])
+                for r in csv.DictReader(f)}
 
 
-def open_csv_append(path: str) -> tuple[object, object]:
-    """Open CSV for appending; write header only if file is new/empty."""
+def open_csv_append(path: str) -> tuple:
     is_new = not os.path.exists(path) or os.path.getsize(path) == 0
     f = open(path, "a", newline="", encoding="utf-8")
-    writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+    w = csv.DictWriter(f, fieldnames=FIELDNAMES)
     if is_new:
-        writer.writeheader()
-    return f, writer
+        w.writeheader()
+    return f, w
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +123,6 @@ Single word only. No explanation."""
 
 
 def judge_pair(client: Groq, shop_a: str, name_a: str, shop_b: str, name_b: str) -> str:
-    """Ask Llama 4 Scout whether two product names refer to the same SKU."""
     user_msg = (
         f"Product A — shop: {shop_a}\nName: {name_a}\n\n"
         f"Product B — shop: {shop_b}\nName: {name_b}\n\n"
@@ -143,54 +148,81 @@ def judge_pair(client: Groq, shop_a: str, name_a: str, shop_b: str, name_b: str)
 # ---------------------------------------------------------------------------
 
 def run() -> None:
-    bq_client = get_bq_client()
-    client    = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    bq_client     = bigquery.Client(project=GCP_PROJECT)
+    client        = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    brand_lookup  = load_brand_lookup(BRAND_LIST_PATH)
 
     log.info("Fetching cross-shop pairs from BigQuery…")
     all_pairs = fetch_pairs(bq_client)
-    log.info("Total pairs in dataset: %d", len(all_pairs))
+    log.info("Total cross-shop pairs: %d", len(all_pairs))
 
-    # Resume: skip pairs already processed
+    # Step 2 — Brand filter: keep only same-brand pairs
+    if brand_lookup:
+        same_brand_pairs = []
+        skipped_diff_brand = 0
+        skipped_unknown    = 0
+        for p in all_pairs:
+            b1 = brand_lookup.get(p["PRODUCT_NAME_1"], "UNKNOWN")
+            b2 = brand_lookup.get(p["PRODUCT_NAME_2"], "UNKNOWN")
+            if b1 == "UNKNOWN" or b2 == "UNKNOWN":
+                skipped_unknown += 1
+            elif b1 != b2:
+                skipped_diff_brand += 1
+            else:
+                p["BRAND_1"] = b1
+                p["BRAND_2"] = b2
+                same_brand_pairs.append(p)
+        log.info(
+            "After brand filter → %d same-brand pairs  "
+            "(skipped: %d different-brand, %d unknown-brand)",
+            len(same_brand_pairs), skipped_diff_brand, skipped_unknown,
+        )
+        pairs_to_evaluate = same_brand_pairs
+    else:
+        # No brand list — fall back to all pairs
+        for p in all_pairs:
+            p["BRAND_1"] = ""
+            p["BRAND_2"] = ""
+        pairs_to_evaluate = all_pairs
+
+    # Step 3 — Resume: skip already-processed pairs
     done = load_done_pairs(OUTPUT_PATH) | load_done_pairs(UNCERTAIN_PATH)
     pairs = [
-        p for p in all_pairs
+        p for p in pairs_to_evaluate
         if (p["SHOP_NAME_1"], p["PRODUCT_NAME_1"],
             p["SHOP_NAME_2"], p["PRODUCT_NAME_2"]) not in done
     ]
-    log.info("Already processed: %d  Remaining: %d", len(done), len(pairs))
+    log.info("Already processed: %d  Remaining to evaluate: %d", len(done), len(pairs))
 
     if not pairs:
         log.info("All pairs already processed. Nothing to do.")
         return
 
-    out_f,  out_w  = open_csv_append(OUTPUT_PATH)
-    unc_f,  unc_w  = open_csv_append(UNCERTAIN_PATH)
-
+    out_f, out_w = open_csv_append(OUTPUT_PATH)
+    unc_f, unc_w = open_csv_append(UNCERTAIN_PATH)
     same = different = uncertain = 0
 
     try:
         for i, pair in enumerate(pairs, 1):
             shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"]
             shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"]
+            brand  = pair.get("BRAND_1", "")
 
-            log.info("[%d/%d] [%s] %s  ↔  [%s] %s", i, len(pairs), shop_a, name_a, shop_b, name_b)
+            log.info("[%d/%d] [%s] %s  ↔  [%s] %s",
+                     i, len(pairs), shop_a, name_a, shop_b, name_b)
 
             verdict = judge_pair(client, shop_a, name_a, shop_b, name_b)
             log.info("  → %s", verdict)
 
-            row = dict(shop_name_1=shop_a, product_name_1=name_a,
-                       shop_name_2=shop_b, product_name_2=name_b, verdict=verdict)
+            row = dict(shop_name_1=shop_a, product_name_1=name_a, brand_1=brand,
+                       shop_name_2=shop_b, product_name_2=name_b, brand_2=brand,
+                       verdict=verdict)
             if verdict == "UNCERTAIN":
-                unc_w.writerow(row)
-                unc_f.flush()
-                uncertain += 1
+                unc_w.writerow(row);  unc_f.flush();  uncertain += 1
             else:
-                out_w.writerow(row)
-                out_f.flush()
-                if verdict == "SAME":
-                    same += 1
-                else:
-                    different += 1
+                out_w.writerow(row);  out_f.flush()
+                if verdict == "SAME": same += 1
+                else: different += 1
 
             time.sleep(RATE_LIMIT_DELAY)
 
@@ -199,15 +231,12 @@ def run() -> None:
         unc_f.close()
 
     log.info("Done.  SAME=%d  DIFFERENT=%d  UNCERTAIN=%d", same, different, uncertain)
-    log.info("Ground truth  → %s", OUTPUT_PATH)
-    log.info("Manual review → %s", UNCERTAIN_PATH)
-    log.info("")
     total_done = len(done) + same + different + uncertain
-    log.info("Overall progress: %d / %d pairs labelled", total_done, len(all_pairs))
-    if total_done < len(all_pairs):
-        log.info("Re-run the workflow tomorrow to continue — already-done pairs will be skipped.")
+    log.info("Progress: %d / %d same-brand pairs labelled", total_done, len(pairs_to_evaluate))
+    if total_done < len(pairs_to_evaluate):
+        log.info("Re-run tomorrow to continue — already-done pairs are skipped automatically.")
     else:
-        log.info("All pairs labelled! Run evaluate_matching.py to get Precision / Recall / F1.")
+        log.info("All done! Run evaluate_matching.py to get Precision / Recall / F1.")
 
 
 if __name__ == "__main__":
