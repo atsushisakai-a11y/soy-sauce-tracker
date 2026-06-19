@@ -33,11 +33,29 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 GCP_PROJECT   = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
-RAW_TABLE     = f"{GCP_PROJECT}.raw.raw_products"
+RAW_TABLE     = f"{GCP_PROJECT}.raw.raw_kikkoman_prices"
 GROQ_MODEL    = "meta-llama/llama-4-scout-17b-16e-instruct"
 OUTPUT_PATH   = os.path.join(os.path.dirname(__file__), "brand_list.csv")
 FIELDNAMES    = ["product_name", "brand"]
 RATE_LIMIT_DELAY = 2.1
+
+# Products confirmed as no-brand or minor brand — written as UNKNOWN directly,
+# no Groq call needed. Update this list when new unbranded products appear.
+KNOWN_UNKNOWNS: frozenset[str] = frozenset({
+    "Black Soy Sauce F2  - 700ml Desk Som Boon - yellow label",
+    "Gen'en Shoyu 150ml TD",
+    "Golden Label Lichte Sojasaus",
+    "HB BLACK SOY SAUCE 700 ML",
+    "HB MUSHROOM SOY SAUCE 700 ML",
+    "HB SOY SAUCE MUSHROOM 300 ML",
+    "KZ SOY SAUCE SUSHI & SASHIMI 200 ML",
+    "Nama Soy Sauce 200ML",
+    "SHIBANUMA Gluten-Free Soy Sauce 1L",
+    "SHIBANUMA Soy Sauce 300ml",
+    "Sweet Soy Sauce 250ML",
+    "Tokusen Marudaizu Shoyu 1L",
+    "Tokusen Yuki Shoyu 500ML",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +67,7 @@ def fetch_product_names(client: bigquery.Client) -> list[str]:
     rows = client.query(f"""
         SELECT DISTINCT PRODUCT_NAME
         FROM `{RAW_TABLE}`
-        WHERE SCRAPE_DATE = (SELECT MAX(SCRAPE_DATE) FROM `{RAW_TABLE}`)
+        WHERE SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
           AND PRODUCT_NAME IS NOT NULL
         ORDER BY PRODUCT_NAME
     """).result()
@@ -122,12 +140,16 @@ def run() -> None:
     f, w = open_csv_append(OUTPUT_PATH)
     try:
         for i, name in enumerate(names, 1):
-            log.info("[%d/%d] %s", i, len(names), name)
-            brand = extract_brand(client, name)
-            log.info("  → %s", brand)
+            if name in KNOWN_UNKNOWNS:
+                log.info("[%d/%d] %s  → UNKNOWN (pre-confirmed, skipping Groq)", i, len(names), name)
+                brand = "UNKNOWN"
+            else:
+                log.info("[%d/%d] %s", i, len(names), name)
+                brand = extract_brand(client, name)
+                log.info("  → %s", brand)
+                time.sleep(RATE_LIMIT_DELAY)
             w.writerow({"product_name": name, "brand": brand})
             f.flush()
-            time.sleep(RATE_LIMIT_DELAY)
     finally:
         f.close()
 

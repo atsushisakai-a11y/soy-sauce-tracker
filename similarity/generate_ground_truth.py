@@ -75,7 +75,7 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
             SHOP_NAME_1, PRODUCT_NAME_1,
             SHOP_NAME_2, PRODUCT_NAME_2
         FROM `{SIMILARITY_TABLE}`
-        WHERE SCRAPE_DATE = (SELECT MAX(SCRAPE_DATE) FROM `{SIMILARITY_TABLE}`)
+        WHERE SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{SIMILARITY_TABLE}`)
           AND SHOP_NAME_1 != SHOP_NAME_2
         ORDER BY SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2
     """).result()

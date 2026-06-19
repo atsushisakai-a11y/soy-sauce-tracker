@@ -92,7 +92,7 @@ def ensure_table(client: bigquery.Client) -> None:
     client.query(f"""
         CREATE TABLE IF NOT EXISTS `{TABLE_ID}` (
             SIMILARITY_ID         STRING,
-            SCRAPE_DATE           DATE,
+            SCRAPED_AT           DATE,
             SHOP_NAME_1           STRING,
             SHOP_NAME_2           STRING,
             PRODUCT_NAME_1        STRING,
@@ -584,7 +584,7 @@ def run():
                      img_score, name_score, combined, is_match, name_a, name_b)
             insert_rows.append({
                 "SIMILARITY_ID":    similarity_id,
-                "SCRAPE_DATE":      str(scrape_date),
+                "SCRAPED_AT":      str(scrape_date),
                 "SHOP_NAME_1":      shop_a,
                 "SHOP_NAME_2":      shop_b,
                 "PRODUCT_NAME_1":   name_a,
@@ -601,7 +601,7 @@ def run():
         if insert_rows:
             # Remove any incomplete rows from a previous failed run for this date
             client.query(f"""
-                DELETE FROM `{TABLE_ID}` WHERE SCRAPE_DATE = '{scrape_date}'
+                DELETE FROM `{TABLE_ID}` WHERE SCRAPED_AT = '{scrape_date}'
             """).result()
 
             job_config = bigquery.LoadJobConfig(
