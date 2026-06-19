@@ -719,6 +719,224 @@ export default function TechPage() {
               <p className="mt-2 text-green-700">→ Union-Find: all 4 listings → global_product_id = 9458878e-b263-50f2-8f51-6d15a4e7f8fc</p>
             </div>
           </div>
+
+          {/* Ground Truth */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+            <h4 className="font-semibold text-stone-900">Step E — Generating ground truth with Claude</h4>
+
+            {/* Problem statement */}
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">Problem: how do you know the model is accurate?</p>
+              <p className="text-sm text-stone-600 leading-relaxed">
+                The similarity pipeline produces an <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">IS_MATCH</span> verdict
+                for every cross-shop product pair. But without labelled ground truth, there is no way to quantify
+                how accurate those verdicts actually are — or to catch regressions when the model is tuned.
+                Building a labelled dataset manually for ~500 pairs per scrape date would be both tedious and
+                subjective.
+              </p>
+            </div>
+
+            {/* Metrics */}
+            <div className="border border-indigo-100 rounded-xl overflow-hidden">
+              <div className="bg-indigo-50 px-5 py-3 border-b border-indigo-100">
+                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Quantification — Recall / Precision / F1</span>
+              </div>
+              <div className="p-5 space-y-3">
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  With a ground truth set in hand, three standard binary-classification metrics measure the
+                  quality of the similarity model end-to-end.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {
+                      label: "Recall",
+                      formula: "TP / (TP + FN)",
+                      example: "e.g. 90 / 100",
+                      desc: "Of all truly matching pairs, how many did the model catch? A low recall means real matches are being missed.",
+                      color: "bg-green-50 border-green-200 text-green-800",
+                    },
+                    {
+                      label: "Precision",
+                      formula: "TP / (TP + FP)",
+                      example: "e.g. 90 / 95",
+                      desc: "Of all pairs the model said match, how many actually do? A low precision means false positives are polluting the price comparisons.",
+                      color: "bg-blue-50 border-blue-200 text-blue-800",
+                    },
+                    {
+                      label: "F1",
+                      formula: "2 × P × R / (P + R)",
+                      example: "harmonic mean",
+                      desc: "Single combined score. Useful when recall and precision need to be balanced — a model that flags everything has recall=1 but precision≈0.",
+                      color: "bg-purple-50 border-purple-200 text-purple-800",
+                    },
+                  ].map((m) => (
+                    <div key={m.label} className={`border rounded-xl p-4 space-y-1.5 ${m.color}`}>
+                      <p className="text-xs font-bold uppercase tracking-wide">{m.label}</p>
+                      <p className="text-lg font-bold font-mono">{m.formula}</p>
+                      <p className="text-xs font-semibold opacity-60">{m.example}</p>
+                      <p className="text-xs leading-relaxed opacity-75">{m.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Solution: Claude as oracle */}
+            <div className="border border-amber-100 rounded-xl overflow-hidden">
+              <div className="bg-amber-50 px-5 py-3 border-b border-amber-100">
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Solution — Groq (Llama 3.2 Vision) as an independent oracle</span>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-stone-600 leading-relaxed">
+                  <span className="font-mono bg-stone-100 px-1.5 py-0.5 rounded text-xs">similarity/generate_ground_truth.py</span> replaces
+                  manual labelling entirely. It queries all distinct cross-shop pairs from BigQuery (latest
+                  scrape date only), downloads both product images, and asks <strong>Llama 3.2 Vision via Groq</strong> —
+                  the same API already powering the Telegram bot — to render a verdict for each pair.
+                </p>
+
+                {/* Why Groq / Llama Vision */}
+                <div className="border border-amber-200 rounded-xl overflow-hidden">
+                  <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-100">
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">Why Groq / Llama 3.2 Vision?</span>
+                  </div>
+                  <div className="p-4 space-y-2.5">
+                    {[
+                      {
+                        icon: "🔍",
+                        title: "Reads text inside the image",
+                        body: "Llama Vision extracts brand names, product type labels, and volume text printed on the bottle — information DINOv2 treats as just another patch of pixels. A label saying \"150ml\" or \"Gen'en\" is decisive evidence the model can act on.",
+                      },
+                      {
+                        icon: "🧠",
+                        title: "Cross-language domain knowledge",
+                        body: "The model understands that 亀甲万 = Kikkoman, 濃口醤油 = regular dark soy sauce, and that \"tamari\" and \"regular\" are different product categories — without needing a hand-written alias table.",
+                      },
+                      {
+                        icon: "🔀",
+                        title: "Combines image and text in one judgment",
+                        body: "The oracle receives both the product name string and the product image together, the same way a human would. It can reconcile a low-quality image with a clear product name, or override a confusing name with an obvious visual.",
+                      },
+                      {
+                        icon: "⚖️",
+                        title: "Independent signal — no circular validation",
+                        body: "The DINOv2 + colour-histogram pipeline never runs during ground truth generation. Because the two systems use completely different reasoning paths, Llama&apos;s verdicts are genuine external labels — not a re-scoring of the same features.",
+                      },
+                      {
+                        icon: "🆓",
+                        title: "Free tier — already integrated",
+                        body: "Groq's free tier is genuinely free, no billing required. The same GROQ_API_KEY already used by the Telegram bot scoring pipeline is reused here — zero additional setup.",
+                      },
+                      {
+                        icon: "📏",
+                        title: "Consistent and repeatable",
+                        body: "Unlike manual labelling — which suffers from annotator fatigue and inter-rater disagreement — the model applies the same prompt and reasoning to every pair. Re-running the script produces the same distribution of verdicts.",
+                      },
+                    ].map((r) => (
+                      <div key={r.title} className="flex gap-3">
+                        <span className="text-base flex-shrink-0 mt-0.5">{r.icon}</span>
+                        <div>
+                          <p className="text-xs font-semibold text-stone-700">{r.title}</p>
+                          <p className="text-xs text-stone-500 leading-relaxed mt-0.5">{r.body}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cost */}
+                <div className="border border-emerald-100 rounded-xl overflow-hidden">
+                  <div className="bg-emerald-50 px-4 py-2.5 border-b border-emerald-100">
+                    <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Cost — ~500 pairs per run</span>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <p className="text-xs text-stone-500 leading-relaxed">
+                      Each API call sends two product images plus a short text prompt.
+                      Output is a single word. Llama 3.2 Vision via Groq free tier is used — the same API key already in use for the Telegram bot scoring pipeline.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-stone-100">
+                            <th className="text-left py-1.5 pr-4 text-stone-400 font-medium">Item</th>
+                            <th className="text-right py-1.5 pr-4 text-stone-400 font-medium">Limit</th>
+                            <th className="text-right py-1.5 pr-4 text-stone-400 font-medium">Usage (~500 pairs)</th>
+                            <th className="text-right py-1.5 text-stone-400 font-medium">Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          <tr>
+                            <td className="py-2 pr-4 text-stone-600 align-top">Requests per minute</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">~30 RPM</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">~28/min (2s delay)</td>
+                            <td className="py-2 text-right font-mono text-emerald-700 align-top font-bold">$0</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 pr-4 text-stone-600 align-top">Requests per day</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">1,500/day</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">~500 (one run)</td>
+                            <td className="py-2 text-right font-mono text-emerald-700 align-top font-bold">$0</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 pr-4 text-stone-600 align-top">Run duration</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">—</td>
+                            <td className="py-2 pr-4 text-right font-mono text-stone-600 align-top">~18 min</td>
+                            <td className="py-2 text-right font-mono text-emerald-700 align-top font-bold">$0</td>
+                          </tr>
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-stone-200">
+                            <td colSpan={3} className="pt-2 pr-4 text-xs font-bold text-stone-700">Total per full run</td>
+                            <td className="pt-2 text-right font-bold font-mono text-emerald-700 text-base">Free</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-stone-600 leading-relaxed">
+                      <span className="font-bold text-emerald-700">Free tier: </span>
+                      Groq free tier (Llama 3.2 Vision) — ~30 requests/min, no billing required.
+                      A full run of ~500 pairs takes roughly 18 minutes and costs nothing. Ground truth only needs to be regenerated when the product catalogue grows
+                      significantly or the similarity model is re-tuned — in practice a few times per year.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  {[
+                    { step: "1", label: "Fetch pairs", detail: "BigQuery — latest scrape date, cross-shop only", color: "bg-stone-100 text-stone-700 border-stone-200" },
+                    { step: "2", label: "Download images", detail: "Both product photos as JPEG base64", color: "bg-blue-50 text-blue-700 border-blue-200" },
+                    { step: "3", label: "Ask Claude", detail: "Names + images → SAME / DIFFERENT / UNCERTAIN", color: "bg-amber-50 text-amber-700 border-amber-200" },
+                    { step: "4", label: "Write CSV", detail: "ground_truth.csv + ground_truth_uncertain.csv", color: "bg-green-50 text-green-700 border-green-200" },
+                  ].map((s) => (
+                    <div key={s.step} className={`border rounded-xl p-3 text-center ${s.color}`}>
+                      <div className="text-xs font-bold opacity-50 mb-1">Step {s.step}</div>
+                      <div className="font-semibold">{s.label}</div>
+                      <div className="text-xs opacity-70 mt-1 leading-relaxed">{s.detail}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-stone-50 rounded-xl p-4 space-y-1.5">
+                  <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">Output</p>
+                  <div className="space-y-1 font-mono text-xs text-stone-600">
+                    <p><span className="text-green-700">ground_truth.csv</span>          — SAME + DIFFERENT verdicts (labelled ground truth for Recall / Precision / F1)</p>
+                    <p><span className="text-amber-700">ground_truth_uncertain.csv</span> — pairs Claude could not judge confidently (for optional manual review)</p>
+                  </div>
+                </div>
+
+                <div className="bg-stone-900 rounded-xl p-4 space-y-2 text-white">
+                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wide">One-shot execution — no manual work required</p>
+                  <p className="text-xs text-stone-300 leading-relaxed">
+                    Triggered on demand via GitHub Actions workflow{" "}
+                    <span className="font-mono bg-stone-700 px-1.5 py-0.5 rounded">92. Generate Ground Truth (Groq Vision Oracle)</span>.
+                    A single run labels all ~500 pairs. The resulting CSVs are uploaded as build artifacts
+                    and feed directly into{" "}
+                    <span className="font-mono bg-stone-700 px-1.5 py-0.5 rounded">evaluate_matching.py</span>{" "}
+                    to compute the final Recall / Precision / F1 scores.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* dbt Data Quality — Step 6 */}

@@ -1,28 +1,30 @@
 """
-Generate ground_truth.csv using Claude Vision as an independent oracle.
+Generate ground_truth.csv using Groq (Llama 3.2 Vision) as an independent oracle.
 
 Flow:
   1. Read all distinct cross-shop pairs from STAGING.STAGING_SIMILARITY_SCORES
-     (image URLs already stored there from the DINOv2 pipeline run)
-  2. For each pair, download both product images
-  3. Send product names + images to Claude Haiku — completely independent from the
-     DINOv2 / colour-histogram pipeline
+     (most recent scrape date only — avoids repeating the same pairs per date)
+  2. For each pair, download both product images as base64 JPEG
+  3. Send product names + images to Llama 3.2 Vision via Groq for judgment
+     — completely separate from the DINOv2 / colour-histogram pipeline
   4. Write SAME / DIFFERENT pairs to ground_truth.csv
   5. Write UNCERTAIN pairs to ground_truth_uncertain.csv for manual review
 
-Why Claude Vision as oracle?
-  DINOv2 reasons about pixel-level visual structure. Claude Vision reasons about
-  semantic product identity (brand marks, label text, product type). These are
-  genuinely independent signals, so Claude's verdicts are valid ground truth for
-  measuring recall and precision of the main matching pipeline.
+Why Groq / Llama 3.2 Vision as oracle?
+  DINOv2 reasons about pixel-level visual structure. Llama Vision reasons about
+  semantic product identity (brand marks, label text, product type, volume).
+  Genuinely independent signals → valid ground truth for Recall / Precision / F1.
+
+  Groq free tier: ~30 RPM for vision models — sufficient for ~500 pairs in <30 min.
+  Uses the same GROQ_API_KEY already in use by the Telegram bot scoring pipeline.
 
 Output files:
-  ground_truth.csv          — all SAME and DIFFERENT verdicts (labelled ground truth)
-  ground_truth_uncertain.csv — pairs Claude could not confidently judge (manual review)
+  ground_truth.csv           — SAME and DIFFERENT verdicts (labelled ground truth)
+  ground_truth_uncertain.csv — pairs the model could not confidently judge
 
 Usage:
-    pip install anthropic google-cloud-bigquery python-dotenv Pillow requests
-    python similarity/generate_ground_truth.py
+    pip install groq google-cloud-bigquery python-dotenv Pillow requests
+    GROQ_API_KEY=<key> python similarity/generate_ground_truth.py
 """
 
 import ast
@@ -34,9 +36,9 @@ import os
 import time
 
 import requests
-from anthropic import Anthropic
 from dotenv import load_dotenv
 from google.cloud import bigquery
+from groq import Groq
 from PIL import Image
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -46,7 +48,7 @@ log = logging.getLogger(__name__)
 
 GCP_PROJECT      = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
 SIMILARITY_TABLE = f"{GCP_PROJECT}.staging.staging_similarity_scores"
-CLAUDE_MODEL     = "claude-haiku-4-5-20251001"
+GROQ_MODEL       = "llama-3.2-11b-vision-preview"
 
 OUTPUT_PATH    = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
 UNCERTAIN_PATH = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
@@ -58,8 +60,8 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
-TIMEOUT            = 15
-RATE_LIMIT_DELAY   = 0.3   # seconds between Claude API calls to stay within rate limits
+TIMEOUT          = 15
+RATE_LIMIT_DELAY = 2.1  # ~30 RPM free tier → stay safely under 1 req/2s
 
 
 # ---------------------------------------------------------------------------
@@ -71,11 +73,7 @@ def get_bq_client() -> bigquery.Client:
 
 
 def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return distinct cross-shop pairs from the most recent scrape date only.
-
-    Using MAX(SCRAPE_DATE) avoids pulling the same product pair once per scrape
-    date (which inflates pair count ~10x without adding new information).
-    """
+    """Return distinct cross-shop pairs from the most recent scrape date only."""
     rows = client.query(f"""
         SELECT DISTINCT
             SHOP_NAME_1,    PRODUCT_NAME_1,    IMAGE_URL_1,
@@ -91,11 +89,11 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Image helpers (mirrors image_similarity.py logic)
+# Image helpers
 # ---------------------------------------------------------------------------
 
 def _clean_image_url(url: str) -> str:
-    """Extract a plain URL from values that may be stored as JSON-LD ImageObject strings."""
+    """Extract a plain URL from values stored as JSON-LD ImageObject strings."""
     if not url:
         return ""
     if url.startswith("http"):
@@ -110,7 +108,7 @@ def _clean_image_url(url: str) -> str:
 
 
 def download_image_b64(url: str) -> str | None:
-    """Download image and return as JPEG base64 string, or None on failure."""
+    """Download image and return base64-encoded JPEG string, or None on failure."""
     clean = _clean_image_url(url)
     if not clean:
         return None
@@ -119,7 +117,7 @@ def download_image_b64(url: str) -> str | None:
         r.raise_for_status()
         img = Image.open(io.BytesIO(r.content)).convert("RGB")
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
+        img.save(buf, format="JPEG")
         return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
     except Exception as e:
         log.warning("  Image download failed (%s): %s", clean[:60], e)
@@ -127,7 +125,7 @@ def download_image_b64(url: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Claude Vision oracle
+# Groq Vision oracle
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
@@ -144,46 +142,32 @@ Reply with exactly one word:
 Single word only. No explanation."""
 
 
-def _build_content(
-    shop_a: str, name_a: str, img_a: str | None,
-    shop_b: str, name_b: str, img_b: str | None,
-) -> list[dict]:
-    """Build the Claude message content list, including images when available."""
-    content: list[dict] = []
-
-    def add_product(shop: str, name: str, img: str | None, label: str) -> None:
-        content.append({"type": "text", "text": f"{label} (shop: {shop})\nName: {name}"})
-        if img:
-            content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": "image/jpeg", "data": img},
-            })
-        else:
-            content.append({"type": "text", "text": "(image unavailable)"})
-
-    add_product(shop_a, name_a, img_a, "Product A")
-    add_product(shop_b, name_b, img_b, "Product B")
-    content.append({"type": "text", "text": "Are these the same product SKU?"})
-    return content
+def _img_part(b64: str) -> dict:
+    return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
 
 
 def judge_pair(
-    client: Anthropic,
+    client: Groq,
     shop_a: str, name_a: str, img_a: str | None,
     shop_b: str, name_b: str, img_b: str | None,
 ) -> str:
-    """Ask Claude Haiku to judge whether two products are the same SKU.
+    """Ask Llama Vision via Groq whether two products are the same SKU.
     Returns 'SAME', 'DIFFERENT', or 'UNCERTAIN'."""
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
+    content: list = [{"type": "text", "text": f"Product A (shop: {shop_a})\nName: {name_a}"}]
+    content.append(_img_part(img_a) if img_a else {"type": "text", "text": "(image unavailable)"})
+    content.append({"type": "text", "text": f"Product B (shop: {shop_b})\nName: {name_b}"})
+    content.append(_img_part(img_b) if img_b else {"type": "text", "text": "(image unavailable)"})
+    content.append({"type": "text", "text": "Are these the same product SKU?"})
+
+    response = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": content},
+        ],
         max_tokens=10,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": _build_content(shop_a, name_a, img_a, shop_b, name_b, img_b),
-        }],
     )
-    verdict = response.content[0].text.strip().upper()
+    verdict = response.choices[0].message.content.strip().upper()
     if verdict not in ("SAME", "DIFFERENT", "UNCERTAIN"):
         log.warning("  Unexpected verdict '%s' — treating as UNCERTAIN", verdict)
         return "UNCERTAIN"
@@ -198,8 +182,8 @@ FIELDNAMES = ["shop_name_1", "product_name_1", "shop_name_2", "product_name_2", 
 
 
 def run() -> None:
-    bq_client     = get_bq_client()
-    claude_client = Anthropic()
+    bq_client = get_bq_client()
+    client    = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     log.info("Fetching cross-shop pairs from BigQuery…")
     pairs = fetch_pairs(bq_client)
@@ -217,7 +201,7 @@ def run() -> None:
 
         img_a   = download_image_b64(url_a)
         img_b   = download_image_b64(url_b)
-        verdict = judge_pair(claude_client, shop_a, name_a, img_a, shop_b, name_b, img_b)
+        verdict = judge_pair(client, shop_a, name_a, img_a, shop_b, name_b, img_b)
         log.info("  → %s", verdict)
 
         row = dict(shop_name_1=shop_a, product_name_1=name_a,
@@ -231,14 +215,12 @@ def run() -> None:
 
         time.sleep(RATE_LIMIT_DELAY)
 
-    # ground_truth.csv — all confident labels (SAME + DIFFERENT)
     with open(OUTPUT_PATH, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
         writer.writerows(same_rows)
         writer.writerows(different_rows)
 
-    # ground_truth_uncertain.csv — pairs needing manual review
     with open(UNCERTAIN_PATH, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
