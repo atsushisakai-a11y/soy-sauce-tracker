@@ -43,7 +43,6 @@ RATE_LIMIT_DELAY = 2.1
 # no Groq call needed. Update this list when new unbranded products appear.
 KNOWN_UNKNOWNS: frozenset[str] = frozenset({
     "Black Soy Sauce F2  - 700ml Desk Som Boon - yellow label",
-    "Gen'en Shoyu 150ml TD",
     "Golden Label Lichte Sojasaus",
     "HB BLACK SOY SAUCE 700 ML",
     "HB MUSHROOM SOY SAUCE 700 ML",
