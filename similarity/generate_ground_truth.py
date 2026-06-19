@@ -83,19 +83,19 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
     Filters to same-volume pairs with normalised units (1l/1liter → 1000ml)
     to avoid trivially different pairs like 150ml vs 1L consuming Groq quota.
     """
-    rows = client.query(rf"""
+    rows = client.query(f"""
         WITH products AS (
             SELECT
                 SHOP_NAME,
                 PRODUCT_NAME,
                 CASE
-                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), r'\d+\s*(?:liter|litre|l\b)')
-                    THEN CAST(
-                        CAST(REGEXP_EXTRACT(PRODUCT_NAME, r'(\d+)\s*(?:[Ll]iter|[Ll]itre|[Ll]\b)') AS INT64) * 1000
-                        AS STRING) || 'ml'
-                    ELSE REGEXP_REPLACE(
-                        REGEXP_EXTRACT(LOWER(PRODUCT_NAME), r'\d+\s*(?:ml|g\b|kg)'),
-                        r'\s', '')
+                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(liter|litre)')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*(liter|litre)') AS INT64) * 1000 AS STRING) || 'ml'
+                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*l[^a-z]')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*l[^a-z]') AS INT64) * 1000 AS STRING) || 'ml'
+                    WHEN REGEXP_CONTAINS(LOWER(PRODUCT_NAME), '[0-9]+[ ]*l$')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '([0-9]+)[ ]*l$') AS INT64) * 1000 AS STRING) || 'ml'
+                    ELSE REGEXP_REPLACE(REGEXP_EXTRACT(LOWER(PRODUCT_NAME), '[0-9]+[ ]*(ml|kg|g)'), '[ ]', '')
                 END AS volume
             FROM `{RAW_TABLE}`
             WHERE SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
