@@ -1,4 +1,4 @@
-name: 6. dbt Docs - Deploy to GitHub Pages
+name: 7. dbt Docs - Deploy to GitHub Pages
 
 on:
   workflow_dispatch:

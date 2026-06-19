@@ -1,4 +1,4 @@
-name: 92. Generate Ground Truth (Groq Oracle)
+name: 2. Generate Ground Truth (Groq Oracle)
 
 on:
   workflow_dispatch:

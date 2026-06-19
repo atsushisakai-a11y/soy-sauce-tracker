@@ -1,4 +1,4 @@
-name: 2. Compute - Image Similarity Scores
+name: 4. Compute - Image Similarity Scores
 
 on:
   workflow_dispatch:

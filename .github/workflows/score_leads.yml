@@ -1,4 +1,4 @@
-name: 7. Score Leads - Propensity Model
+name: 8. Score Leads - Propensity Model
 
 on:
   # Run daily at 02:00 CET (01:00 UTC) — after new leads have been collected

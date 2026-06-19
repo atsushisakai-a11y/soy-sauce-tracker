@@ -39,9 +39,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-GCP_PROJECT      = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
-SIMILARITY_TABLE = f"{GCP_PROJECT}.staging.staging_similarity_scores"
-GROQ_MODEL       = "meta-llama/llama-4-scout-17b-16e-instruct"
+GCP_PROJECT = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
+RAW_TABLE   = f"{GCP_PROJECT}.raw.raw_kikkoman_prices"
+GROQ_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 BRAND_LIST_PATH = os.path.join(os.path.dirname(__file__), "brand_list.csv")
 OUTPUT_PATH     = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
@@ -78,15 +78,19 @@ def detect_brand(product_name: str, brand_keywords: list[tuple[str, str]]) -> st
 # ---------------------------------------------------------------------------
 
 def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return distinct cross-shop pairs from the most recent scrape date."""
+    """Return distinct cross-shop pairs from the most recent scrape, one direction only."""
     rows = client.query(f"""
         SELECT DISTINCT
-            SHOP_NAME_1, PRODUCT_NAME_1,
-            SHOP_NAME_2, PRODUCT_NAME_2
-        FROM `{SIMILARITY_TABLE}`
-        WHERE SCRAPE_DATE = (SELECT MAX(SCRAPE_DATE) FROM `{SIMILARITY_TABLE}`)
-          AND SHOP_NAME_1 != SHOP_NAME_2
-        ORDER BY SHOP_NAME_1, PRODUCT_NAME_1, SHOP_NAME_2
+            a.SHOP_NAME    AS SHOP_NAME_1,
+            a.PRODUCT_NAME AS PRODUCT_NAME_1,
+            b.SHOP_NAME    AS SHOP_NAME_2,
+            b.PRODUCT_NAME AS PRODUCT_NAME_2
+        FROM `{RAW_TABLE}` a
+        JOIN `{RAW_TABLE}` b
+            ON a.SCRAPED_AT = b.SCRAPED_AT
+           AND a.SHOP_NAME < b.SHOP_NAME
+        WHERE a.SCRAPED_AT = (SELECT MAX(SCRAPED_AT) FROM `{RAW_TABLE}`)
+        ORDER BY a.SHOP_NAME, a.PRODUCT_NAME, b.SHOP_NAME
     """).result()
     return [dict(row) for row in rows]
 

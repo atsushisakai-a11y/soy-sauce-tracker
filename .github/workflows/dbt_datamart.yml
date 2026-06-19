@@ -1,4 +1,4 @@
-name: 5. dbt - Run Datamart Model
+name: 6. dbt - Run Datamart Model
 
 on:
   workflow_dispatch:
