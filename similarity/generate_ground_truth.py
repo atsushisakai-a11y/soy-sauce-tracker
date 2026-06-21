@@ -232,7 +232,13 @@ def run() -> None:
             log.info("[%d/%d] [%s] %s  ↔  [%s] %s",
                      i, len(pairs), shop_a, name_a, shop_b, name_b)
 
-            verdict = judge_pair(client, shop_a, name_a, shop_b, name_b)
+            try:
+                verdict = judge_pair(client, shop_a, name_a, shop_b, name_b)
+            except Exception as e:
+                if "rate_limit_exceeded" in str(e) or "429" in str(e):
+                    log.warning("Groq daily request limit reached. Progress saved — re-run tomorrow.")
+                    break
+                raise
             log.info("  → %s", verdict)
 
             row = dict(shop_name_1=shop_a, product_name_1=name_a, brand_1=brand,
