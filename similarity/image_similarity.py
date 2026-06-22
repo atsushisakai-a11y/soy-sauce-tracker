@@ -138,7 +138,7 @@ def fetch_products(client: bigquery.Client):
             FROM `{STAGING_TABLE}`
             WHERE image_url IS NOT NULL
               AND image_url != ''
-              AND brand != 'Other'
+              AND brand IN ('Kikkoman', 'Pearl River Bridge', 'Lee Kum Kee', 'Yamasa', 'ABC')
         )
         SELECT scrape_date, brand, volume, shop_name, product_name, image_url
         FROM products

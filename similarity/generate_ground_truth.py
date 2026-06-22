@@ -65,18 +65,11 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
                 PRODUCT_NAME,
                 PRODUCT_URL,
                 CASE
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%kikkoman%'        THEN 'KIKKOMAN'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%lee kum kee%'     THEN 'LEE KUM KEE'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%kikkoman%'           THEN 'KIKKOMAN'
                     WHEN LOWER(PRODUCT_NAME) LIKE '%pearl river bridge%' THEN 'PEARL RIVER BRIDGE'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%mee chun%'        THEN 'MEE CHUN'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%healthy boy%'     THEN 'HEALTHY BOY'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%yamasa%'          THEN 'YAMASA'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%sempio%'          THEN 'SEMPIO'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%silver swan%'     THEN 'SILVER SWAN'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%dek som boon%'    THEN 'DEK SOM BOON'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%marukin%'         THEN 'MARUKIN'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%abc%'             THEN 'ABC'
-                    WHEN LOWER(PRODUCT_NAME) LIKE '%hb %'             THEN 'HEALTHY BOY'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%lee kum kee%'        THEN 'LEE KUM KEE'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%yamasa%'             THEN 'YAMASA'
+                    WHEN LOWER(PRODUCT_NAME) LIKE '%abc%'                THEN 'ABC'
                     ELSE 'UNKNOWN'
                 END AS brand,
                 CASE
