@@ -50,7 +50,25 @@ WITH cleaned AS (
                     * 1000 AS INT64
                 )
             ELSE 500
-        END                                         AS volume_ml
+        END                                         AS volume_ml,
+        -- Brand detection: only the top 5 brands by product count are tracked.
+        -- Products from other brands are excluded at this layer (brand = 'Other').
+        CASE
+            WHEN LOWER(product_name) LIKE '%kikkoman%'           THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%pearl river bridge%' THEN 'Pearl River Bridge'
+            WHEN LOWER(product_name) LIKE '%lee kum kee%'        THEN 'Lee Kum Kee'
+            WHEN LOWER(product_name) LIKE '%yamasa%'             THEN 'Yamasa'
+            WHEN LOWER(product_name) LIKE '%abc%'                THEN 'ABC'
+            -- Kikkoman product lines that omit the brand name
+            WHEN LOWER(product_name) LIKE '%tokusen%'            THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%gen_en%'             THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%kishibori%'          THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%koikuchi shoyu%'     THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%nama soy%'           THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%teriyaki bbq%'       THEN 'Kikkoman'
+            WHEN LOWER(product_name) LIKE '%gluten free tamari%' THEN 'Kikkoman'
+            ELSE 'Other'
+        END                                         AS brand
 
     FROM {{ ref('raw_kikkoman_prices') }}
     WHERE raw_price IS NOT NULL
@@ -75,32 +93,7 @@ SELECT
     )                                               AS global_product_id,
     c.shop_name,
     c.product_name,
-    CASE
-        -- Explicit brand name in product name
-        WHEN LOWER(c.product_name) LIKE '%kikkoman%'          THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%yamasa%'            THEN 'Yamasa'
-        WHEN LOWER(c.product_name) LIKE '%lee kum kee%'       THEN 'Lee Kum Kee'
-        WHEN LOWER(c.product_name) LIKE '%sempio%'            THEN 'Sempio'
-        WHEN LOWER(c.product_name) LIKE '%pearl river bridge%' THEN 'Pearl River Bridge'
-        WHEN LOWER(c.product_name) LIKE '%marukin%'           THEN 'Marukin'
-        WHEN LOWER(c.product_name) LIKE '%silver swan%'       THEN 'Silver Swan'
-        WHEN LOWER(c.product_name) LIKE '%healthy boy%'       THEN 'Healthy Boy'
-        WHEN LOWER(c.product_name) LIKE '%mee chun%'          THEN 'Mee Chun'
-        WHEN LOWER(c.product_name) LIKE '%abc%'               THEN 'ABC'
-        WHEN LOWER(c.product_name) LIKE '%kimlan%'            THEN 'Kimlan'
-        WHEN LOWER(c.product_name) LIKE '%wan ja shan%'       THEN 'Wan Ja Shan'
-        WHEN LOWER(c.product_name) LIKE '%dek som boon%'      THEN 'Dek Som Boon'
-        WHEN LOWER(c.product_name) LIKE '%takesan%'           THEN 'Takesan'
-        -- Kikkoman product lines that omit the brand name
-        WHEN LOWER(c.product_name) LIKE '%tokusen%'           THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%gen_en%'            THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%kishibori%'         THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%koikuchi shoyu%'    THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%nama soy%'          THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%teriyaki bbq%'      THEN 'Kikkoman'
-        WHEN LOWER(c.product_name) LIKE '%gluten free tamari%' THEN 'Kikkoman'
-        ELSE 'Other'
-    END                                             AS brand,
+    c.brand,
     CASE
         WHEN LOWER(c.product_name) LIKE '%less salt%'
           OR LOWER(c.product_name) LIKE '%gen_en%'
@@ -131,3 +124,4 @@ LEFT JOIN {{ source('staging', 'staging_product_groups') }} pg
 
 WHERE c.price_eur IS NOT NULL
   AND c.price_eur > 0
+  AND c.brand != 'Other'
