@@ -59,14 +59,6 @@ WITH cleaned AS (
             WHEN LOWER(product_name) LIKE '%lee kum kee%'        THEN 'Lee Kum Kee'
             WHEN LOWER(product_name) LIKE '%yamasa%'             THEN 'Yamasa'
             WHEN LOWER(product_name) LIKE '%abc%'                THEN 'ABC'
-            -- Kikkoman product lines that omit the brand name
-            WHEN LOWER(product_name) LIKE '%tokusen%'            THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%gen_en%'             THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%kishibori%'          THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%koikuchi shoyu%'     THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%nama soy%'           THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%teriyaki bbq%'       THEN 'Kikkoman'
-            WHEN LOWER(product_name) LIKE '%gluten free tamari%' THEN 'Kikkoman'
             ELSE 'Other'
         END                                         AS brand
 
