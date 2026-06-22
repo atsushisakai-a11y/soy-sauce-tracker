@@ -1,4 +1,4 @@
-name: 3. dbt - Run Staging Model
+name: 3. Generate - Brand and Volume for staging.staging_prices
 
 on:
   workflow_dispatch:

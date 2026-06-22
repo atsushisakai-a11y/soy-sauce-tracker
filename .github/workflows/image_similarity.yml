@@ -32,7 +32,6 @@ jobs:
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install transformers timm
           pip install rembg onnxruntime
-          pip install dbt-bigquery
 
       - name: Cache HuggingFace model (DINOv2)
         uses: actions/cache@v4
@@ -63,12 +62,6 @@ jobs:
 
       - name: Assign global product IDs
         run: python similarity/assign_product_ids.py
-
-      - name: dbt deps
-        run: cd dbt && dbt deps
-
-      - name: dbt run - staging_prices (full refresh)
-        run: cd dbt && dbt run --full-refresh --select staging_prices
 
       - name: Notify Telegram
         if: always()

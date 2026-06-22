@@ -1,34 +1,23 @@
 """
-Generate ground_truth.csv using Groq (Llama 4 Scout) — same-brand pairs only.
+Generate ground truth labels using Groq (Llama 4 Scout) — same-brand pairs only.
+
+Writes results to BigQuery `staging.staging_prices_ground_truth` instead of CSV files.
+Resume/checkpoint: pairs already in that table are skipped on re-run.
 
 Optimization vs naive all-pairs approach:
   Naive: 4,520 cross-shop pairs → exhausts Groq free-tier token budget in one run.
-  Optimised: filter to same-brand pairs first → typically 5–10% of all pairs.
-
-  Brand filtering uses keyword matching against brand_list.csv (brand + keyword columns).
-  A product name containing "kikkoman" → KIKKOMAN, "hb" → HEALTHY BOY, etc.
-  New products are matched automatically without updating brand_list.csv, as long as
-  the brand keyword appears somewhere in the product name.
-
-  Step 1 — Brand filtering (this script):
-      Only pairs where both products share the same known brand are evaluated.
-      A KIKKOMAN vs LEE KUM KEE pair is trivially DIFFERENT — no LLM call needed.
-
-  Step 2 — Similarity evaluation (this script):
-      Send the filtered same-brand pairs to Llama 4 Scout (text-only, ~180 tok/call).
-
-Resume/checkpoint:
-  Results are written immediately. Re-running skips already-processed pairs.
+  Optimised: filter to same-brand same-volume pairs first → ~7.5% of all pairs.
+  Brand and volume filtering is done entirely in BigQuery SQL.
 
 Usage:
     pip install groq google-cloud-bigquery python-dotenv
     GROQ_API_KEY=<key> python similarity/generate_ground_truth.py
 """
 
-import csv
 import logging
 import os
 import time
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from google.cloud import bigquery
@@ -41,53 +30,40 @@ log = logging.getLogger(__name__)
 
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
 RAW_TABLE   = f"{GCP_PROJECT}.raw.raw_kikkoman_prices"
+GT_TABLE    = f"{GCP_PROJECT}.staging.staging_prices_ground_truth"
 GROQ_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-BRAND_LIST_PATH = os.path.join(os.path.dirname(__file__), "brand_list.csv")
-OUTPUT_PATH     = os.path.join(os.path.dirname(__file__), "ground_truth.csv")
-UNCERTAIN_PATH  = os.path.join(os.path.dirname(__file__), "ground_truth_uncertain.csv")
-FIELDNAMES      = ["shop_name_1", "product_name_1", "brand_1",
-                   "shop_name_2", "product_name_2", "brand_2", "verdict"]
-
 RATE_LIMIT_DELAY = 2.1
-
-
-# ---------------------------------------------------------------------------
-# Brand detection via keyword matching
-# ---------------------------------------------------------------------------
-
-def load_brand_keywords(path: str) -> list[tuple[str, str]]:
-    """Load brand_list.csv → [(brand, keyword), ...]. Returns [] if file missing."""
-    if not os.path.exists(path):
-        log.warning("brand_list.csv not found at %s — running without brand filter.", path)
-        return []
-    with open(path, newline="", encoding="utf-8") as f:
-        return [(row["brand"], row["keyword"].lower()) for row in csv.DictReader(f)]
-
-
-def detect_brand(product_name: str, brand_keywords: list[tuple[str, str]]) -> str:
-    name_lower = product_name.lower()
-    for brand, keyword in brand_keywords:
-        if keyword in name_lower:
-            return brand
-    return "UNKNOWN"
 
 
 # ---------------------------------------------------------------------------
 # BigQuery
 # ---------------------------------------------------------------------------
 
-def fetch_pairs(client: bigquery.Client) -> list[dict]:
-    """Return distinct cross-shop pairs from the most recent scrape, one direction only.
+def ensure_gt_table(client: bigquery.Client) -> None:
+    client.query(f"""
+        CREATE TABLE IF NOT EXISTS `{GT_TABLE}` (
+            shop_name_1    STRING,
+            product_name_1 STRING,
+            product_url_1  STRING,
+            brand          STRING,
+            shop_name_2    STRING,
+            product_name_2 STRING,
+            product_url_2  STRING,
+            verdict        STRING,
+            labelled_at    TIMESTAMP
+        )
+    """).result()
 
-    Filters to same-volume pairs with normalised units (1l/1liter → 1000ml)
-    to avoid trivially different pairs like 150ml vs 1L consuming Groq quota.
-    """
+
+def fetch_pairs(client: bigquery.Client) -> list[dict]:
+    """Return distinct cross-shop same-brand same-volume pairs from the latest scrape."""
     rows = client.query(f"""
         WITH products AS (
             SELECT
                 SHOP_NAME,
                 PRODUCT_NAME,
+                PRODUCT_URL,
                 CASE
                     WHEN LOWER(PRODUCT_NAME) LIKE '%kikkoman%'        THEN 'KIKKOMAN'
                     WHEN LOWER(PRODUCT_NAME) LIKE '%lee kum kee%'     THEN 'LEE KUM KEE'
@@ -118,9 +94,11 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
         SELECT DISTINCT
             a.SHOP_NAME    AS SHOP_NAME_1,
             a.PRODUCT_NAME AS PRODUCT_NAME_1,
+            a.PRODUCT_URL  AS PRODUCT_URL_1,
             a.brand        AS BRAND,
             b.SHOP_NAME    AS SHOP_NAME_2,
-            b.PRODUCT_NAME AS PRODUCT_NAME_2
+            b.PRODUCT_NAME AS PRODUCT_NAME_2,
+            b.PRODUCT_URL  AS PRODUCT_URL_2
         FROM products a
         JOIN products b
             ON a.brand  = b.brand
@@ -136,22 +114,24 @@ def fetch_pairs(client: bigquery.Client) -> list[dict]:
 # Checkpoint / resume
 # ---------------------------------------------------------------------------
 
-def load_done_pairs(path: str) -> set[tuple]:
-    if not os.path.exists(path):
-        return set()
-    with open(path, newline="", encoding="utf-8") as f:
+def load_done_pairs(client: bigquery.Client) -> set[tuple]:
+    """Return pairs already in the ground truth table to skip on re-run."""
+    try:
+        rows = client.query(f"""
+            SELECT shop_name_1, product_name_1, shop_name_2, product_name_2
+            FROM `{GT_TABLE}`
+        """).result()
         return {(r["shop_name_1"], r["product_name_1"],
                  r["shop_name_2"], r["product_name_2"])
-                for r in csv.DictReader(f)}
+                for r in rows}
+    except Exception:
+        return set()
 
 
-def open_csv_append(path: str) -> tuple:
-    is_new = not os.path.exists(path) or os.path.getsize(path) == 0
-    f = open(path, "a", newline="", encoding="utf-8")
-    w = csv.DictWriter(f, fieldnames=FIELDNAMES)
-    if is_new:
-        w.writeheader()
-    return f, w
+def insert_row(client: bigquery.Client, row: dict) -> None:
+    errors = client.insert_rows_json(GT_TABLE, [row])
+    if errors:
+        log.error("BigQuery insert error: %s", errors)
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +178,16 @@ def judge_pair(client: Groq, shop_a: str, name_a: str, shop_b: str, name_b: str)
 # ---------------------------------------------------------------------------
 
 def run() -> None:
-    bq_client      = bigquery.Client(project=GCP_PROJECT)
-    client         = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    brand_keywords = load_brand_keywords(BRAND_LIST_PATH)
+    bq_client   = bigquery.Client(project=GCP_PROJECT)
+    groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+    ensure_gt_table(bq_client)
 
     log.info("Fetching cross-shop pairs from BigQuery…")
     pairs_to_evaluate = fetch_pairs(bq_client)
     log.info("Same-brand same-volume pairs to evaluate: %d", len(pairs_to_evaluate))
 
-    # Step 3 — Resume: skip already-processed pairs
-    done = load_done_pairs(OUTPUT_PATH) | load_done_pairs(UNCERTAIN_PATH)
+    done = load_done_pairs(bq_client)
     pairs = [
         p for p in pairs_to_evaluate
         if (p["SHOP_NAME_1"], p["PRODUCT_NAME_1"],
@@ -219,43 +199,41 @@ def run() -> None:
         log.info("All pairs already processed. Nothing to do.")
         return
 
-    out_f, out_w = open_csv_append(OUTPUT_PATH)
-    unc_f, unc_w = open_csv_append(UNCERTAIN_PATH)
     same = different = uncertain = 0
 
-    try:
-        for i, pair in enumerate(pairs, 1):
-            shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"]
-            shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"]
-            brand  = pair.get("BRAND", "")
+    for i, pair in enumerate(pairs, 1):
+        shop_a = pair["SHOP_NAME_1"];  name_a = pair["PRODUCT_NAME_1"];  url_a = pair["PRODUCT_URL_1"]
+        shop_b = pair["SHOP_NAME_2"];  name_b = pair["PRODUCT_NAME_2"];  url_b = pair["PRODUCT_URL_2"]
+        brand  = pair["BRAND"]
 
-            log.info("[%d/%d] [%s] %s  ↔  [%s] %s",
-                     i, len(pairs), shop_a, name_a, shop_b, name_b)
+        log.info("[%d/%d] [%s] %s  ↔  [%s] %s",
+                 i, len(pairs), shop_a, name_a, shop_b, name_b)
 
-            try:
-                verdict = judge_pair(client, shop_a, name_a, shop_b, name_b)
-            except Exception as e:
-                if "rate_limit_exceeded" in str(e) or "429" in str(e):
-                    log.warning("Groq daily request limit reached. Progress saved — re-run tomorrow.")
-                    break
-                raise
-            log.info("  → %s", verdict)
+        try:
+            verdict = judge_pair(groq_client, shop_a, name_a, shop_b, name_b)
+        except Exception as e:
+            if "rate_limit_exceeded" in str(e) or "429" in str(e):
+                log.warning("Groq daily request limit reached. Progress saved — re-run tomorrow.")
+                break
+            raise
+        log.info("  → %s", verdict)
 
-            row = dict(shop_name_1=shop_a, product_name_1=name_a, brand_1=brand,
-                       shop_name_2=shop_b, product_name_2=name_b, brand_2=brand,
-                       verdict=verdict)
-            if verdict == "UNCERTAIN":
-                unc_w.writerow(row);  unc_f.flush();  uncertain += 1
-            else:
-                out_w.writerow(row);  out_f.flush()
-                if verdict == "SAME": same += 1
-                else: different += 1
+        insert_row(bq_client, {
+            "shop_name_1":    shop_a,
+            "product_name_1": name_a,
+            "product_url_1":  url_a,
+            "brand":          brand,
+            "shop_name_2":    shop_b,
+            "product_name_2": name_b,
+            "product_url_2":  url_b,
+            "verdict":        verdict,
+            "labelled_at":    datetime.now(timezone.utc).isoformat(),
+        })
+        if verdict == "SAME":        same += 1
+        elif verdict == "DIFFERENT": different += 1
+        else:                        uncertain += 1
 
-            time.sleep(RATE_LIMIT_DELAY)
-
-    finally:
-        out_f.close()
-        unc_f.close()
+        time.sleep(RATE_LIMIT_DELAY)
 
     log.info("Done.  SAME=%d  DIFFERENT=%d  UNCERTAIN=%d", same, different, uncertain)
     total_done = len(done) + same + different + uncertain

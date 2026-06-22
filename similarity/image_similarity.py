@@ -49,7 +49,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "soy-sauce-tracker")
-TABLE_ID    = f"{GCP_PROJECT}.staging.staging_similarity_scores"
+TABLE_ID       = f"{GCP_PROJECT}.staging.staging_similarity_scores"
+STAGING_TABLE  = f"{GCP_PROJECT}.staging.staging_prices"
 
 HEADERS = {
     "User-Agent": (
@@ -109,18 +110,40 @@ def ensure_table(client: bigquery.Client) -> None:
 
 
 def fetch_products(client: bigquery.Client):
-    """Return all products from raw_kikkoman_prices that have a non-empty image_url."""
+    """Return products from staging_prices, prefiltered to known brand + known volume.
+
+    Volume is extracted using the same CASE WHEN SQL logic as generate_ground_truth.py
+    so the two pipelines group on the same normalised volume strings (e.g. '1000ml').
+    Brand comes from the staging column (already computed by dbt).
+    Only products with a non-null brand (not 'Other') and a non-null volume are returned,
+    so image comparisons are limited to same-brand same-volume groups.
+    """
     result = client.query(f"""
-        SELECT
-            DATE(scraped_at) AS scrape_date,
-            'Kikkoman'       AS brand,
-            shop_name,
-            product_name,
-            image_url
-        FROM `{GCP_PROJECT}.raw.raw_kikkoman_prices`
-        WHERE image_url IS NOT NULL
-          AND image_url != ''
-        ORDER BY scrape_date, brand, shop_name
+        WITH products AS (
+            SELECT
+                DATE(scraped_at)  AS scrape_date,
+                brand,
+                shop_name,
+                product_name,
+                image_url,
+                CASE
+                    WHEN REGEXP_CONTAINS(LOWER(product_name), '[0-9]+[ ]*(?:liter|litre)')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(product_name), '([0-9]+)[ ]*(?:liter|litre)') AS INT64) * 1000 AS STRING) || 'ml'
+                    WHEN REGEXP_CONTAINS(LOWER(product_name), '[0-9]+[ ]*l[^a-z]')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(product_name), '([0-9]+)[ ]*l[^a-z]') AS INT64) * 1000 AS STRING) || 'ml'
+                    WHEN REGEXP_CONTAINS(LOWER(product_name), '[0-9]+[ ]*l$')
+                        THEN CAST(CAST(REGEXP_EXTRACT(LOWER(product_name), '([0-9]+)[ ]*l$') AS INT64) * 1000 AS STRING) || 'ml'
+                    ELSE REGEXP_REPLACE(REGEXP_EXTRACT(LOWER(product_name), '[0-9]+[ ]*(?:ml|kg|g)'), '[ ]', '')
+                END AS volume
+            FROM `{STAGING_TABLE}`
+            WHERE image_url IS NOT NULL
+              AND image_url != ''
+              AND brand != 'Other'
+        )
+        SELECT scrape_date, brand, volume, shop_name, product_name, image_url
+        FROM products
+        WHERE volume IS NOT NULL
+        ORDER BY scrape_date, brand, volume, shop_name
     """).result()
     return [tuple(row) for row in result]
 
@@ -518,26 +541,26 @@ def run():
 
     rows = fetch_products(client)
     if not rows:
-        log.info("No products with image_url found in raw_kikkoman_prices.")
+        log.info("No products with image_url found in staging_prices.")
         return
 
     processed_dates = fetch_processed_dates(client)
 
-    # Group by (scrape_date, brand)
+    # Group by (scrape_date, brand, volume) — prefilter to same-brand same-volume
     groups: dict[tuple, list] = {}
-    for scrape_date, brand, shop_name, product_name, image_url in rows:
-        key = (scrape_date, brand)
+    for scrape_date, brand, volume, shop_name, product_name, image_url in rows:
+        key = (scrape_date, brand, volume)
         groups.setdefault(key, []).append((shop_name, product_name, image_url))
 
     computed_at = datetime.now(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S")
     total_inserted = 0
 
-    for (scrape_date, brand), products in groups.items():
+    for (scrape_date, brand, volume), products in groups.items():
         if scrape_date in processed_dates:
-            log.info("Skipping %s / %s — already processed.", scrape_date, brand)
+            log.info("Skipping %s / %s / %s — already processed.", scrape_date, brand, volume)
             continue
 
-        log.info("Processing %s / %s (%d products)…", scrape_date, brand, len(products))
+        log.info("Processing %s / %s / %s (%d products)…", scrape_date, brand, volume, len(products))
 
         # Download all images for this group
         images = {}
