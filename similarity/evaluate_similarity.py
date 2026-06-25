@@ -76,30 +76,33 @@ def run() -> None:
     client.query(sql).result()
     log.info("Table created.")
 
-    # Summary stats
+    # Summary stats — count all rows first, then compute metrics on matched subset
     stats = client.query(f"""
         SELECT
-            COUNT(*)                                             AS total_pairs,
-            COUNTIF(ground_truth_verdict IS NOT NULL)           AS matched_with_ground_truth,
-            COUNTIF(ground_truth_verdict IS NULL)               AS not_in_ground_truth,
-            COUNTIF(IS_MATCH AND ground_truth_verdict = 'SAME')       AS true_positive,
-            COUNTIF(IS_MATCH AND ground_truth_verdict = 'DIFFERENT')  AS false_positive,
-            COUNTIF(NOT IS_MATCH AND ground_truth_verdict = 'SAME')   AS false_negative,
+            COUNT(*)                                                     AS total_pairs,
+            COUNTIF(ground_truth_verdict IS NOT NULL)                    AS matched_with_ground_truth,
+            COUNTIF(ground_truth_verdict IS NULL)                        AS not_in_ground_truth,
+            COUNTIF(IS_MATCH     AND ground_truth_verdict = 'SAME')      AS true_positive,
+            COUNTIF(IS_MATCH     AND ground_truth_verdict = 'DIFFERENT') AS false_positive,
+            COUNTIF(NOT IS_MATCH AND ground_truth_verdict = 'SAME')      AS false_negative,
             COUNTIF(NOT IS_MATCH AND ground_truth_verdict = 'DIFFERENT') AS true_negative
         FROM `{OUTPUT_TABLE}`
-        WHERE ground_truth_verdict IS NOT NULL
     """).result()
 
     for row in stats:
-        tp = row["true_positive"]
-        fp = row["false_positive"]
-        fn = row["false_negative"]
-        tn = row["true_negative"]
+        tp      = row["true_positive"]
+        fp      = row["false_positive"]
+        fn      = row["false_negative"]
+        tn      = row["true_negative"]
         total   = row["total_pairs"]
         matched = row["matched_with_ground_truth"]
 
         if total == 0:
             log.warning("staging_similarity_scores is empty — run step 3 (Compute Image Similarity) first.")
+            return
+        if matched == 0:
+            log.warning("No similarity score rows matched the ground truth table — check that product names align.")
+            log.info("Total similarity pairs in table: %d", total)
             return
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
