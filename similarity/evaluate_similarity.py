@@ -60,15 +60,15 @@ def run() -> None:
             WHERE UPPER(verdict) = UPPER(manual_check)
         ) gt
         ON (
-            (ss.SHOP_NAME_1    = gt.shop_name_1
-             AND ss.PRODUCT_NAME_1 = gt.product_name_1
-             AND ss.SHOP_NAME_2    = gt.shop_name_2
-             AND ss.PRODUCT_NAME_2 = gt.product_name_2)
+            (LOWER(TRIM(ss.SHOP_NAME_1))    = LOWER(TRIM(gt.shop_name_1))
+             AND LOWER(TRIM(ss.PRODUCT_NAME_1)) = LOWER(TRIM(gt.product_name_1))
+             AND LOWER(TRIM(ss.SHOP_NAME_2))    = LOWER(TRIM(gt.shop_name_2))
+             AND LOWER(TRIM(ss.PRODUCT_NAME_2)) = LOWER(TRIM(gt.product_name_2)))
             OR
-            (ss.SHOP_NAME_1    = gt.shop_name_2
-             AND ss.PRODUCT_NAME_1 = gt.product_name_2
-             AND ss.SHOP_NAME_2    = gt.shop_name_1
-             AND ss.PRODUCT_NAME_2 = gt.product_name_1)
+            (LOWER(TRIM(ss.SHOP_NAME_1))    = LOWER(TRIM(gt.shop_name_2))
+             AND LOWER(TRIM(ss.PRODUCT_NAME_1)) = LOWER(TRIM(gt.product_name_2))
+             AND LOWER(TRIM(ss.SHOP_NAME_2))    = LOWER(TRIM(gt.shop_name_1))
+             AND LOWER(TRIM(ss.PRODUCT_NAME_2)) = LOWER(TRIM(gt.product_name_1)))
         )
     """
 
