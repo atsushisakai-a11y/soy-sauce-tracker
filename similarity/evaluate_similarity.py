@@ -95,8 +95,12 @@ def run() -> None:
         fp = row["false_positive"]
         fn = row["false_negative"]
         tn = row["true_negative"]
-        total    = row["total_pairs"]
-        matched  = row["matched_with_ground_truth"]
+        total   = row["total_pairs"]
+        matched = row["matched_with_ground_truth"]
+
+        if total == 0:
+            log.warning("staging_similarity_scores is empty — run step 3 (Compute Image Similarity) first.")
+            return
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall    = tp / (tp + fn) if (tp + fn) > 0 else 0
