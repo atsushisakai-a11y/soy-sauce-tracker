@@ -10,15 +10,16 @@
 
 WITH counts AS (
     SELECT
-        COUNT(*)                                                            AS total_pairs,
-        COUNTIF(ground_truth_verdict IS NOT NULL)                           AS matched_with_gt,
-        COUNTIF(ground_truth_verdict IS NULL)                               AS not_in_gt,
-        COUNTIF(is_match     AND ground_truth_verdict = 'SAME')             AS true_positive,
-        COUNTIF(is_match     AND ground_truth_verdict = 'DIFFERENT')        AS false_positive,
-        COUNTIF(NOT is_match AND ground_truth_verdict = 'SAME')             AS false_negative,
-        COUNTIF(NOT is_match AND ground_truth_verdict = 'DIFFERENT')        AS true_negative,
-        MAX(computed_at)                                                     AS evaluated_at
+        computed_at                                                          AS evaluated_at,
+        COUNT(*)                                                             AS total_pairs,
+        COUNTIF(ground_truth_verdict IS NOT NULL)                            AS matched_with_gt,
+        COUNTIF(ground_truth_verdict IS NULL)                                AS not_in_gt,
+        COUNTIF(is_match     AND ground_truth_verdict = 'SAME')              AS true_positive,
+        COUNTIF(is_match     AND ground_truth_verdict = 'DIFFERENT')         AS false_positive,
+        COUNTIF(NOT is_match AND ground_truth_verdict = 'SAME')              AS false_negative,
+        COUNTIF(NOT is_match AND ground_truth_verdict = 'DIFFERENT')         AS true_negative
     FROM {{ ref('fact_similarity_scores') }}
+    GROUP BY computed_at
 )
 
 SELECT

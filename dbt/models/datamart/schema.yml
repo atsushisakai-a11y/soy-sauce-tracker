@@ -60,14 +60,19 @@ models:
 
   - name: datamart_similarity_model_evaluation
     description: >
-      Data quality report for the IS_MATCH similarity pipeline — one row with
-      Precision, Recall, F1, and Accuracy computed against the human-validated
-      ground truth. Pairs without a ground truth label are counted in total_pairs
-      but excluded from metric computation.
+      Data quality report for the IS_MATCH similarity pipeline — one row per
+      evaluation run (keyed by evaluated_at) so Precision, Recall, F1, and
+      Accuracy can be tracked over time as the model and ground truth evolve.
+      Pairs without a ground truth label are counted in total_pairs but excluded
+      from metric computation.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [evaluated_at]
     columns:
       - name: evaluated_at
-        description: "Timestamp of the most recent similarity score computation."
-        tests: [not_null]
+        description: "Timestamp of the evaluation run — one row per run."
+        tests: [not_null, unique]
       - name: total_pairs
         tests: [not_null]
       - name: matched_with_gt
