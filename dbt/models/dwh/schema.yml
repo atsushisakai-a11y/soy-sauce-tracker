@@ -72,3 +72,37 @@ models:
         tests: [not_null]
       - name: scrape_date
         tests: [not_null]
+
+  - name: fact_similarity_scores
+    description: >
+      Fact table — one row per cross-shop product pair comparison.
+      IS_MATCH is the DINOv2 pipeline verdict; ground_truth_verdict is the
+      human-validated label (NULL when pair is not in the ground truth set).
+      product_id_1 / product_id_2 resolve to dim_price for attribute lookups.
+    columns:
+      - name: similarity_id
+        description: "UUID — primary key for this pair comparison."
+        tests: [not_null, unique]
+      - name: scrape_date
+        tests: [not_null]
+      - name: product_id_1
+        description: "FK to dim_price — NULL if product not yet in dimension."
+      - name: product_id_2
+        description: "FK to dim_price — NULL if product not yet in dimension."
+      - name: image_similarity
+        description: "DINOv2 cosine similarity between the two product images (0–1)."
+        tests: [not_null]
+      - name: name_similarity
+        description: "Jaccard similarity between tokenised product names (0–1)."
+        tests: [not_null]
+      - name: combined_score
+        description: "Final score used for IS_MATCH classification."
+        tests: [not_null]
+      - name: is_match
+        description: "TRUE when the pipeline classifies the pair as the same product."
+        tests: [not_null]
+      - name: ground_truth_verdict
+        description: "Human-validated label — SAME, DIFFERENT, or NULL when not labelled."
+      - name: computed_at
+        description: "Timestamp when the similarity score was computed."
+        tests: [not_null]

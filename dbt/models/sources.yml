@@ -6,6 +6,27 @@ sources:
     schema: staging
     description: "Staging zone — Python-written tables consumed by dbt models."
     tables:
+      - name: staging_similarity_scores_evaluated
+        description: >
+          One row per cross-shop product pair with IS_MATCH from the DINOv2
+          image similarity pipeline and ground_truth_verdict from manual validation.
+          Written by similarity/evaluate_similarity.py.
+        columns:
+          - name: SIMILARITY_ID
+          - name: SCRAPE_DATE
+          - name: SHOP_NAME_1
+          - name: SHOP_NAME_2
+          - name: PRODUCT_NAME_1
+          - name: PRODUCT_NAME_2
+          - name: IMAGE_URL_1
+          - name: IMAGE_URL_2
+          - name: IMAGE_SIMILARITY
+          - name: NAME_SIMILARITY
+          - name: COMBINED_SCORE
+          - name: IS_MATCH
+          - name: COMPUTED_AT
+          - name: ground_truth_verdict
+
       - name: staging_product_groups
         description: >
           Maps every (shop_name, product_name) to a global_product_id.

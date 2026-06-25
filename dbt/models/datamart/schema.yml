@@ -58,6 +58,48 @@ models:
       - name: avg_price_per_100ml
         tests: [not_null]
 
+  - name: datamart_similarity_model_evaluation
+    description: >
+      Data quality report for the IS_MATCH similarity pipeline — one row with
+      Precision, Recall, F1, and Accuracy computed against the human-validated
+      ground truth. Pairs without a ground truth label are counted in total_pairs
+      but excluded from metric computation.
+    columns:
+      - name: evaluated_at
+        description: "Timestamp of the most recent similarity score computation."
+        tests: [not_null]
+      - name: total_pairs
+        tests: [not_null]
+      - name: matched_with_gt
+        description: "Pairs that have a human-validated ground truth label."
+        tests: [not_null]
+      - name: not_in_gt
+        description: "Pairs without a ground truth label (excluded from metrics)."
+        tests: [not_null]
+      - name: gt_coverage_pct
+        description: "Percentage of total pairs covered by ground truth."
+        tests: [not_null]
+      - name: true_positive
+        tests: [not_null]
+      - name: false_positive
+        tests: [not_null]
+      - name: false_negative
+        tests: [not_null]
+      - name: true_negative
+        tests: [not_null]
+      - name: precision
+        description: "TP / (TP + FP)"
+        tests: [not_null]
+      - name: recall
+        description: "TP / (TP + FN)"
+        tests: [not_null]
+      - name: f1
+        description: "2·TP / (2·TP + FP + FN)"
+        tests: [not_null]
+      - name: accuracy
+        description: "(TP + TN) / matched_with_gt"
+        tests: [not_null]
+
   - name: datamart_price_comparison_by_shop
     description: "Datamart — avg price per 100ml aggregated by shop and month. One row per shop per scrape_month."
     tests:

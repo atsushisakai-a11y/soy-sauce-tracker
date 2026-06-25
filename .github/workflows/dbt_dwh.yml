@@ -32,11 +32,11 @@ jobs:
       - name: dbt deps
         run: cd dbt && dbt deps
 
-      - name: dbt run - dim_price_history, dim_price, fact_price
+      - name: dbt run - dim_price_history, dim_price, fact_price, fact_similarity_scores
         run: |
           FLAGS=""
           if [ "${{ inputs.full_refresh }}" = "true" ]; then FLAGS="--full-refresh"; fi
-          cd dbt && dbt run $FLAGS --select dim_price_history dim_price fact_price
+          cd dbt && dbt run $FLAGS --select dim_price_history dim_price fact_price fact_similarity_scores
 
       - name: dbt test - dwh models
-        run: cd dbt && dbt test --select dim_price_history dim_price fact_price
+        run: cd dbt && dbt test --select dim_price_history dim_price fact_price fact_similarity_scores
