@@ -1,4 +1,4 @@
-name: 6. dbt - Run DWH Models
+name: 7. Run DWH Models
 
 on:
   workflow_dispatch:
