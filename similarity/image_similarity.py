@@ -148,17 +148,6 @@ def fetch_products(client: bigquery.Client):
     return [tuple(row) for row in result]
 
 
-def fetch_processed_dates(client: bigquery.Client):
-    """Return scrape_dates where ALL pairs were successfully computed.
-    A date is considered complete only if the number of rows > 1.
-    Single-pair dates may be incomplete due to image download failures."""
-    result = client.query(f"""
-        SELECT scrape_date, COUNT(*) AS pair_count
-        FROM `{TABLE_ID}`
-        GROUP BY scrape_date
-    """).result()
-    rows = [tuple(row) for row in result]
-    return {row[0] for row in rows if row[1] > 1}
 
 
 def _clean_image_url(url: str) -> str:
@@ -222,7 +211,7 @@ def download_image(url: str):
         img = remove_dark_liquid(img)   # strip soy sauce liquid inside bottle
         return img
     except Exception as e:
-        log.debug("Failed to download %s: %s", url, e)
+        log.warning("Failed to download %s: %s", url, e)
         return None
 
 
@@ -532,19 +521,14 @@ def run():
 
     ensure_table(client)
 
-    # Remove any same-shop pairs inserted before this filter was added
-    client.query(f"""
-        DELETE FROM `{TABLE_ID}`
-        WHERE SHOP_NAME_1 = SHOP_NAME_2
-    """).result()
-    log.info("Removed same-shop pairs from staging_similarity_scores.")
+    # Full refresh — truncate before recomputing all pairs
+    client.query(f"TRUNCATE TABLE `{TABLE_ID}`").result()
+    log.info("Truncated %s for full refresh.", TABLE_ID)
 
     rows = fetch_products(client)
     if not rows:
         log.info("No products with image_url found in staging_prices.")
         return
-
-    processed_dates = fetch_processed_dates(client)
 
     # Group by (scrape_date, brand, volume) — prefilter to same-brand same-volume
     groups: dict[tuple, list] = {}
@@ -556,10 +540,6 @@ def run():
     total_inserted = 0
 
     for (scrape_date, brand, volume), products in groups.items():
-        if scrape_date in processed_dates:
-            log.info("Skipping %s / %s / %s — already processed.", scrape_date, brand, volume)
-            continue
-
         log.info("Processing %s / %s / %s (%d products)…", scrape_date, brand, volume, len(products))
 
         # Download all images for this group
@@ -622,11 +602,6 @@ def run():
             })
 
         if insert_rows:
-            # Remove any incomplete rows from a previous failed run for this date
-            client.query(f"""
-                DELETE FROM `{TABLE_ID}` WHERE SCRAPE_DATE = '{scrape_date}'
-            """).result()
-
             job_config = bigquery.LoadJobConfig(
                 write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             )
