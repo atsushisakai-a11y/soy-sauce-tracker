@@ -1,4 +1,4 @@
-name: 3. Import Ground Truth Validated
+name: 5. Import Ground Truth Validated
 
 on:
   workflow_dispatch:
