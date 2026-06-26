@@ -77,6 +77,13 @@ MATCH_THRESHOLD_BASE = 0.80
 # applies so structural text agreement counts as positive evidence.
 MATCH_THRESHOLD_CONFIRMED = 0.60
 
+# Minimum brand-stripped name similarity to proceed to image comparison.
+# Jaccard is computed on tokens AFTER known brand names are removed so that
+# "KIKKOMAN Soy Sauce NL 1L" vs "Kikkoman Kikkoman Tokusen Marudaizu Shoyu, 1L"
+# compares "soy sauce nl 1l" vs "tokusen marudaizu shoyu 1l" (Jaccard ≈ 0.14)
+# rather than sharing the "kikkoman" token and inflating the score.
+NAME_SIMILARITY_THRESHOLD = 0.5
+
 # Load DINOv2 model once at startup (~330 MB download on first run)
 log.info("Loading DINOv2 model…")
 _PROCESSOR = AutoImageProcessor.from_pretrained(DINO_MODEL_NAME)
@@ -491,21 +498,42 @@ def _normalize_name(name: str) -> str:
     return n
 
 
+def _strip_brand_tokens(normalized: str) -> str:
+    """Remove known brand name phrases from an already-normalized name string.
+
+    Sorted longest-first so multi-word brands ("pearl river bridge") are
+    removed as a phrase before any single-word overlap could match.
+    This prevents brand names shared by both products from artificially
+    inflating Jaccard similarity — e.g. "kikkoman soy sauce 1l" vs
+    "kikkoman tokusen marudaizu shoyu 1l" would share "kikkoman" without
+    stripping, masking the fact that the product types are completely different.
+    """
+    for brand in sorted(KNOWN_BRANDS, key=len, reverse=True):
+        normalized = normalized.replace(brand, " ")
+    return normalized
+
+
 def compute_name_similarity(name_a: str, name_b: str) -> float:
-    """Jaccard similarity on word tokens (0.0 – 1.0).
+    """Jaccard similarity on brand-stripped word tokens (0.0 – 1.0).
 
-    Normalises both names via NAME_ALIASES then to lowercase alphanumeric
-    tokens, and computes intersection / union.
+    Normalises both names via NAME_ALIASES, strips known brand tokens, then
+    computes Jaccard on the remaining alphanumeric tokens.  Stripping brands
+    prevents shared brand names from inflating similarity between different
+    product types (e.g. "Kikkoman Soy Sauce 1L" vs "Kikkoman Tokusen 1L"
+    should compare "soy sauce 1l" vs "tokusen 1l", not share "kikkoman").
 
-    Example after alias resolution:
+    Example after alias resolution + brand stripping:
         'Thin Soy Sauce (Healthy Boy) 700ml'
-        → 'thin soy sauce (dek som boon) 700ml'
+        → strip "dek som boon" → 'thin soy sauce () 700ml'
         vs 'Dek Som Boon Dek Som Boon Thin Soy Sauce, 700ml'
-        → tokens both contain {thin, soy, sauce, dek, som, boon, 700ml}
-        → Jaccard = 1.0  (was 0.44 before alias)
+        → strip "dek som boon" twice → 'thin soy sauce, 700ml'
+        → tokens both contain {thin, soy, sauce, 700ml}
+        → Jaccard = 1.0
     """
     def tokenise(s: str) -> set[str]:
-        return set(re.sub(r"[^a-z0-9]", " ", _normalize_name(s)).split())
+        n = _strip_brand_tokens(_normalize_name(s))
+        n = re.sub(r'(\d+)\s+(ml|l|kg|g)\b', r'\1\2', n)  # "250 ml" → "250ml"
+        return set(re.sub(r"[^a-z0-9]", " ", n).split())
 
     tokens_a = tokenise(name_a)
     tokens_b = tokenise(name_b)
@@ -567,14 +595,15 @@ def run():
             if shop_a == shop_b:
                 continue
             img_score  = compute_image_similarity(img_a, img_b)
-            name_score = compute_name_similarity(name_a, name_b)  # stored for reference
+            name_score = compute_name_similarity(name_a, name_b)
 
             # Hard stops — any one of these disqualifies the pair regardless of image score
             hard_stop = (
-                _conflict_penalty(name_a, name_b) < 1.0       # mutually exclusive product types
-                or _qualifier_penalty(name_a, name_b) < 1.0   # one has use-specific qualifier
-                or _volume_penalty(name_a, name_b) < 1.0      # different sizes (different SKU)
-                or _brand_conflict_penalty(name_a, name_b) < 1.0  # different brands
+                _conflict_penalty(name_a, name_b) < 1.0        # mutually exclusive product types
+                or _qualifier_penalty(name_a, name_b) < 1.0    # one has use-specific qualifier
+                or _volume_penalty(name_a, name_b) < 1.0       # different sizes (different SKU)
+                or _brand_conflict_penalty(name_a, name_b) < 1.0   # different brands
+                or name_score < NAME_SIMILARITY_THRESHOLD       # product types too dissimilar after brand stripping
             )
 
             # Threshold adapts to structural text confirmation:
