@@ -36,15 +36,16 @@ function aggregateBins(rows: DistributionRow[], metric: "name" | "image") {
   return { map, total, sorted: Array.from(map.entries()).sort(([a], [b]) => a - b) };
 }
 
-// Raw count per bin
+// Cumulative absolute counts
 function buildHist(rows: DistributionRow[], metric: "name" | "image"): HistRow[] {
   const { sorted } = aggregateBins(rows, metric);
-  return sorted.map(([bin, counts]) => ({
-    bin: bin.toFixed(2),
-    SAME:      counts.SAME,
-    DIFFERENT: counts.DIFFERENT,
-    UNKNOWN:   counts.UNKNOWN,
-  }));
+  let cumSame = 0, cumDiff = 0, cumUnk = 0;
+  return sorted.map(([bin, counts]) => {
+    cumSame += counts.SAME;
+    cumDiff += counts.DIFFERENT;
+    cumUnk  += counts.UNKNOWN;
+    return { bin: bin.toFixed(2), SAME: cumSame, DIFFERENT: cumDiff, UNKNOWN: cumUnk };
+  });
 }
 
 // Cumulative composition — each bar sums to 100%, values are running totals normalised
@@ -73,7 +74,7 @@ function HistTooltip({ active, payload, label }: { active?: boolean; payload?: T
   const total = payload.reduce((s, p) => s + p.value, 0);
   return (
     <div className="bg-white border border-stone-200 rounded-xl shadow-md px-4 py-3 text-xs space-y-1">
-      <p className="font-semibold text-stone-600 mb-1">bin: {label}</p>
+      <p className="font-semibold text-stone-600 mb-1">≤ {label} (cumulative)</p>
       {[...payload].reverse().map((p) => p.value > 0 && (
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.fill }} />
@@ -190,15 +191,15 @@ export default function SimilarityDistributionChart({ data }: { data: Distributi
       {/* Histogram — absolute counts */}
       <div className="space-y-2">
         <p className="text-xs text-stone-500 leading-relaxed">
-          <span className="font-semibold text-stone-600">Distribution (absolute counts)</span> — number of
-          pairs at each score bin.{" "}
+          <span className="font-semibold text-stone-600">Cumulative counts</span> — running total of pairs
+          at or below each score.{" "}
           <span className="text-green-600 font-semibold">Green = SAME</span>,{" "}
           <span className="text-red-500 font-semibold">Red = DIFFERENT</span>,{" "}
           <span className="text-stone-400 font-semibold">Grey = no ground truth</span>.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <HistChart data={nameHist}  title="Name similarity — count per bin"  refLine={0.50} refLabel="threshold 0.50" />
-          <HistChart data={imageHist} title="Image similarity — count per bin" refLine={0.80} refLabel="threshold 0.80" />
+          <HistChart data={nameHist}  title="Name similarity — cumulative counts"  refLine={0.50} refLabel="threshold 0.50" />
+          <HistChart data={imageHist} title="Image similarity — cumulative counts" refLine={0.80} refLabel="threshold 0.80" />
         </div>
       </div>
 
