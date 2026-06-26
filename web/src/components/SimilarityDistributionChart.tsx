@@ -37,18 +37,19 @@ function aggregateBins(rows: DistributionRow[], metric: "name" | "image") {
 }
 
 function buildCdf(rows: DistributionRow[], metric: "name" | "image"): CdfRow[] {
-  const { map, total, sorted } = aggregateBins(rows, metric);
-  if (total === 0 || !map.size) return [];
+  const { map, sorted } = aggregateBins(rows, metric);
+  if (!map.size) return [];
   let cumSame = 0, cumDiff = 0, cumUnk = 0;
   return sorted.map(([bin, counts]) => {
     cumSame += counts.SAME;
     cumDiff += counts.DIFFERENT;
     cumUnk  += counts.UNKNOWN;
+    const cumTotal = cumSame + cumDiff + cumUnk;
     return {
       bin:       bin.toFixed(2),
-      SAME:      parseFloat(((cumSame / total) * 100).toFixed(1)),
-      DIFFERENT: parseFloat(((cumDiff / total) * 100).toFixed(1)),
-      UNKNOWN:   parseFloat(((cumUnk  / total) * 100).toFixed(1)),
+      SAME:      parseFloat(((cumSame / cumTotal) * 100).toFixed(1)),
+      DIFFERENT: parseFloat(((cumDiff / cumTotal) * 100).toFixed(1)),
+      UNKNOWN:   parseFloat(((cumUnk  / cumTotal) * 100).toFixed(1)),
     };
   });
 }
@@ -122,9 +123,18 @@ function CdfChart({ data, title, refLine, refLabel }: {
           <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: "#a8a29e" }} />
           <Tooltip content={<CdfTooltip />} />
           <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
-          <Bar dataKey="SAME"      stackId="a" fill="#22c55e" />
-          <Bar dataKey="DIFFERENT" stackId="a" fill="#ef4444" />
-          <Bar dataKey="UNKNOWN"   stackId="a" fill="#d6d3d1" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="SAME" stackId="a" fill="#22c55e">
+            <LabelList dataKey="SAME" position="inside" style={{ fontSize: 8, fill: "#fff", fontWeight: 600 }}
+              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
+          </Bar>
+          <Bar dataKey="DIFFERENT" stackId="a" fill="#ef4444">
+            <LabelList dataKey="DIFFERENT" position="inside" style={{ fontSize: 8, fill: "#fff", fontWeight: 600 }}
+              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
+          </Bar>
+          <Bar dataKey="UNKNOWN" stackId="a" fill="#d6d3d1" radius={[2, 2, 0, 0]}>
+            <LabelList dataKey="UNKNOWN" position="inside" style={{ fontSize: 8, fill: "#78716c", fontWeight: 600 }}
+              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
+          </Bar>
           {refLine !== undefined && (
             <ReferenceLine
               x={refLine.toFixed(2)}
@@ -190,9 +200,11 @@ export default function SimilarityDistributionChart({ data }: { data: Distributi
       {/* CDF charts */}
       <div className="space-y-2">
         <p className="text-xs text-stone-500 leading-relaxed">
-          <span className="font-semibold text-stone-600">Cumulative distribution</span> — each bar shows what % of
-          all pairs fall at or below that score.{" "}
-          A good threshold is where the red band flattens before green starts growing.
+          <span className="font-semibold text-stone-600">Cumulative composition</span> — each bar shows the
+          SAME/DIFFERENT/UNKNOWN share of all pairs scoring at or below that score.
+          As the threshold moves right, watch the{" "}
+          <span className="text-green-600 font-semibold">green (SAME)</span> share grow —
+          the crossover point is where setting the threshold starts costing you true matches.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <CdfChart data={nameCdf}  title="Name similarity — cumulative" refLine={0.50} refLabel="threshold 0.50" />
