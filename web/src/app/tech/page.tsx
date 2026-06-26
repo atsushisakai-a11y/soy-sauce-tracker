@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
 import Link from "next/link";
+import { BigQuery } from "@google-cloud/bigquery";
+import ModelEvaluationChart, { type EvalRow } from "@/components/ModelEvaluationChart";
+
+export const revalidate = 3600;
 
 const GITHUB_URL = "https://github.com/atsushisakai-a11y/soy-sauce-tracker";
 
@@ -20,6 +24,34 @@ type DbtSummary = {
   models: number;
   tests: TestResult[];
 };
+function getBqClient(): BigQuery {
+  const credJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (credJson) {
+    return new BigQuery({ projectId: "soy-sauce-tracker", credentials: JSON.parse(credJson) });
+  }
+  return new BigQuery({ projectId: "soy-sauce-tracker" });
+}
+
+async function loadModelEvaluation(): Promise<EvalRow[]> {
+  try {
+    const bq = getBqClient();
+    const [rows] = await bq.query(`
+      SELECT
+        FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', evaluated_at) AS evaluated_at,
+        total_pairs, matched_with_gt, not_in_gt,
+        ROUND(gt_coverage_pct, 1)  AS gt_coverage_pct,
+        true_positive, false_positive, false_negative, true_negative,
+        ROUND(precision, 3) AS precision,
+        ROUND(recall, 3)    AS recall,
+        ROUND(f1, 3)        AS f1,
+        ROUND(accuracy, 3)  AS accuracy
+      FROM \`soy-sauce-tracker.datamart.datamart_similarity_model_evaluation\`
+      ORDER BY evaluated_at ASC
+    `);
+    return rows as EvalRow[];
+  } catch { return []; }
+}
+
 function loadDbtSummary(): DbtSummary | null {
   try {
     const p = path.join(process.cwd(), "public/dbt-docs/summary.json");
@@ -147,8 +179,9 @@ const pipeline = [
   { step: "→", label: "Dashboard", detail: "Next.js + Recharts", color: "bg-amber-100 text-amber-700 border-amber-200" },
 ];
 
-export default function TechPage() {
+export default async function TechPage() {
   const dbt = loadDbtSummary();
+  const evalData = await loadModelEvaluation();
   const dbtByLayer: Record<string, TestResult[]> = {};
   if (dbt) {
     for (const t of dbt.tests) {
@@ -937,6 +970,24 @@ export default function TechPage() {
               </div>
             </div>
           </div>
+
+          {/* Model Accuracy — live from BigQuery */}
+          {evalData.length > 0 && (
+            <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h4 className="font-semibold text-stone-900">Step F — Model Accuracy</h4>
+                  <p className="text-xs text-stone-400 mt-0.5">
+                    Live from <span className="font-mono">datamart.datamart_similarity_model_evaluation</span> · updated each pipeline run
+                  </p>
+                </div>
+                <span className="flex-shrink-0 text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-3 py-1 font-medium">
+                  Live
+                </span>
+              </div>
+              <ModelEvaluationChart data={evalData} />
+            </div>
+          )}
         </section>
 
         {/* dbt Data Quality — Step 6 */}
