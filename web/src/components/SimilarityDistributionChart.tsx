@@ -198,8 +198,8 @@ export default function SimilarityDistributionChart({ data }: { data: Distributi
           <span className="text-stone-400 font-semibold">Grey = no ground truth</span>.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <HistChart data={nameHist}  title="Name similarity — cumulative counts"  refLine={0.50} refLabel="threshold 0.50" />
-          <HistChart data={imageHist} title="Image similarity — cumulative counts" refLine={0.80} refLabel="threshold 0.80" />
+          <HistChart data={nameHist}  title="Name similarity — cumulative counts"  refLine={0.30} refLabel="threshold 0.30" />
+          <HistChart data={imageHist} title="Image similarity — cumulative counts" refLine={0.60} refLabel="threshold 0.60" />
         </div>
       </div>
 
@@ -212,8 +212,8 @@ export default function SimilarityDistributionChart({ data }: { data: Distributi
           the crossover where green overtakes red is the natural threshold.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <CdfChart data={nameCdf}  title="Name similarity — cumulative composition"  refLine={0.50} refLabel="threshold 0.50" />
-          <CdfChart data={imageCdf} title="Image similarity — cumulative composition" refLine={0.80} refLabel="threshold 0.80" />
+          <CdfChart data={nameCdf}  title="Name similarity — cumulative composition"  refLine={0.30} refLabel="threshold 0.30" />
+          <CdfChart data={imageCdf} title="Image similarity — cumulative composition" refLine={0.60} refLabel="threshold 0.60" />
         </div>
       </div>
 

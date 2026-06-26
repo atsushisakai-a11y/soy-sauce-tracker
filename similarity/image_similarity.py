@@ -82,7 +82,13 @@ MATCH_THRESHOLD_CONFIRMED = 0.60
 # "KIKKOMAN Soy Sauce NL 1L" vs "Kikkoman Kikkoman Tokusen Marudaizu Shoyu, 1L"
 # compares "soy sauce nl 1l" vs "tokusen marudaizu shoyu 1l" (Jaccard ≈ 0.14)
 # rather than sharing the "kikkoman" token and inflating the score.
-NAME_SIMILARITY_THRESHOLD = 0.5
+# Set to 0.3: at this threshold only ~2.3% of cumulative pairs are SAME (CDF analysis).
+NAME_SIMILARITY_THRESHOLD = 0.3
+
+# Minimum image similarity score — pairs below this are rejected regardless of name
+# confirmation or brand/volume match.  At 0.6, only ~3.2% of cumulative pairs are SAME
+# (CDF analysis), so the false-negative cost is low.
+IMAGE_SIMILARITY_THRESHOLD = 0.6
 
 # Load DINOv2 model once at startup (~330 MB download on first run)
 log.info("Loading DINOv2 model…")
@@ -604,6 +610,7 @@ def run():
                 or _volume_penalty(name_a, name_b) < 1.0       # different sizes (different SKU)
                 or _brand_conflict_penalty(name_a, name_b) < 1.0   # different brands
                 or name_score < NAME_SIMILARITY_THRESHOLD       # product types too dissimilar after brand stripping
+                or img_score < IMAGE_SIMILARITY_THRESHOLD       # images too dissimilar regardless of name confirmation
             )
 
             # Threshold adapts to structural text confirmation:
