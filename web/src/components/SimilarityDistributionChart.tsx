@@ -21,8 +21,8 @@ export type DistributionRow = {
 };
 
 type BinCounts = { SAME: number; DIFFERENT: number; UNKNOWN: number };
-type CdfRow   = { bin: string } & BinCounts;
-type ShareRow = { bin: string; SAME: number; DIFFERENT: number; UNKNOWN: number; total: number };
+type HistRow = { bin: string } & BinCounts;
+type CdfRow  = { bin: string } & BinCounts;
 
 function aggregateBins(rows: DistributionRow[], metric: "name" | "image") {
   const map = new Map<number, BinCounts>();
@@ -36,6 +36,18 @@ function aggregateBins(rows: DistributionRow[], metric: "name" | "image") {
   return { map, total, sorted: Array.from(map.entries()).sort(([a], [b]) => a - b) };
 }
 
+// Raw count per bin
+function buildHist(rows: DistributionRow[], metric: "name" | "image"): HistRow[] {
+  const { sorted } = aggregateBins(rows, metric);
+  return sorted.map(([bin, counts]) => ({
+    bin: bin.toFixed(2),
+    SAME:      counts.SAME,
+    DIFFERENT: counts.DIFFERENT,
+    UNKNOWN:   counts.UNKNOWN,
+  }));
+}
+
+// Cumulative composition — each bar sums to 100%, values are running totals normalised
 function buildCdf(rows: DistributionRow[], metric: "name" | "image"): CdfRow[] {
   const { map, sorted } = aggregateBins(rows, metric);
   if (!map.size) return [];
@@ -44,55 +56,21 @@ function buildCdf(rows: DistributionRow[], metric: "name" | "image"): CdfRow[] {
     cumSame += counts.SAME;
     cumDiff += counts.DIFFERENT;
     cumUnk  += counts.UNKNOWN;
-    const cumTotal = cumSame + cumDiff + cumUnk;
+    const t = cumSame + cumDiff + cumUnk;
     return {
       bin:       bin.toFixed(2),
-      SAME:      parseFloat(((cumSame / cumTotal) * 100).toFixed(1)),
-      DIFFERENT: parseFloat(((cumDiff / cumTotal) * 100).toFixed(1)),
-      UNKNOWN:   parseFloat(((cumUnk  / cumTotal) * 100).toFixed(1)),
-    };
-  });
-}
-
-function buildShare(rows: DistributionRow[], metric: "name" | "image"): ShareRow[] {
-  const { sorted } = aggregateBins(rows, metric);
-  return sorted.map(([bin, counts]) => {
-    const t = counts.SAME + counts.DIFFERENT + counts.UNKNOWN;
-    return {
-      bin:       bin.toFixed(2),
-      total:     t,
-      SAME:      t ? parseFloat(((counts.SAME      / t) * 100).toFixed(1)) : 0,
-      DIFFERENT: t ? parseFloat(((counts.DIFFERENT / t) * 100).toFixed(1)) : 0,
-      UNKNOWN:   t ? parseFloat(((counts.UNKNOWN   / t) * 100).toFixed(1)) : 0,
+      SAME:      parseFloat(((cumSame / t) * 100).toFixed(1)),
+      DIFFERENT: parseFloat(((cumDiff / t) * 100).toFixed(1)),
+      UNKNOWN:   parseFloat(((cumUnk  / t) * 100).toFixed(1)),
     };
   });
 }
 
 type TooltipPayload = { name: string; value: number; fill: string };
 
-function CdfTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
+function HistTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
   if (!active || !payload?.length) return null;
-  const total = payload[payload.length - 1]?.value ?? 0;
-  return (
-    <div className="bg-white border border-stone-200 rounded-xl shadow-md px-4 py-3 text-xs space-y-1">
-      <p className="font-semibold text-stone-600 mb-1">≤ {label}</p>
-      {[...payload].reverse().map((p) => p.value > 0 && (
-        <div key={p.name} className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.fill }} />
-          <span className="text-stone-500">{p.name}:</span>
-          <span className="font-bold text-stone-800">{p.value.toFixed(1)}%</span>
-        </div>
-      ))}
-      <div className="border-t border-stone-100 pt-1 mt-1 flex justify-between">
-        <span className="text-stone-400">cumulative total</span>
-        <span className="font-bold text-stone-700">{total.toFixed(1)}%</span>
-      </div>
-    </div>
-  );
-}
-
-function ShareTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
-  if (!active || !payload?.length) return null;
+  const total = payload.reduce((s, p) => s + p.value, 0);
   return (
     <div className="bg-white border border-stone-200 rounded-xl shadow-md px-4 py-3 text-xs space-y-1">
       <p className="font-semibold text-stone-600 mb-1">bin: {label}</p>
@@ -100,9 +78,61 @@ function ShareTooltip({ active, payload, label }: { active?: boolean; payload?: 
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.fill }} />
           <span className="text-stone-500">{p.name}:</span>
+          <span className="font-bold text-stone-800">{p.value}</span>
+        </div>
+      ))}
+      <div className="border-t border-stone-100 pt-1 mt-1 flex justify-between">
+        <span className="text-stone-400">total pairs</span>
+        <span className="font-bold text-stone-700">{total}</span>
+      </div>
+    </div>
+  );
+}
+
+function CdfTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl shadow-md px-4 py-3 text-xs space-y-1">
+      <p className="font-semibold text-stone-600 mb-1">≤ {label} (cumulative)</p>
+      {[...payload].reverse().map((p) => p.value > 0 && (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.fill }} />
+          <span className="text-stone-500">{p.name}:</span>
           <span className="font-bold text-stone-800">{p.value.toFixed(1)}%</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function HistChart({ data, title, refLine, refLabel }: {
+  data: HistRow[];
+  title: string;
+  refLine?: number;
+  refLabel?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide text-center">{title}</p>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barCategoryGap="10%">
+          <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
+          <XAxis dataKey="bin" tick={{ fontSize: 9, fill: "#a8a29e" }} interval={1} />
+          <YAxis tick={{ fontSize: 9, fill: "#a8a29e" }} />
+          <Tooltip content={<HistTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
+          <Bar dataKey="SAME"      stackId="a" fill="#22c55e" />
+          <Bar dataKey="DIFFERENT" stackId="a" fill="#ef4444" />
+          <Bar dataKey="UNKNOWN"   stackId="a" fill="#d6d3d1" radius={[2, 2, 0, 0]} />
+          {refLine !== undefined && (
+            <ReferenceLine
+              x={refLine.toFixed(2)}
+              stroke="#7c3aed" strokeWidth={2} strokeDasharray="4 3"
+              label={{ value: refLabel ?? `${refLine}`, position: "top", fontSize: 9, fill: "#7c3aed" }}
+            />
+          )}
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -148,84 +178,44 @@ function CdfChart({ data, title, refLine, refLabel }: {
   );
 }
 
-function ShareChart({ data, title, refLine, refLabel }: {
-  data: ShareRow[];
-  title: string;
-  refLine?: number;
-  refLabel?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-stone-600 uppercase tracking-wide text-center">{title}</p>
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={data} margin={{ top: 4, right: 8, left: -4, bottom: 0 }} barCategoryGap="10%">
-          <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" vertical={false} />
-          <XAxis dataKey="bin" tick={{ fontSize: 9, fill: "#a8a29e" }} interval={1} />
-          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: "#a8a29e" }} />
-          <Tooltip content={<ShareTooltip />} />
-          <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
-          <Bar dataKey="SAME" stackId="a" fill="#22c55e">
-            <LabelList dataKey="SAME" position="inside" style={{ fontSize: 8, fill: "#fff", fontWeight: 600 }}
-              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
-          </Bar>
-          <Bar dataKey="DIFFERENT" stackId="a" fill="#ef4444">
-            <LabelList dataKey="DIFFERENT" position="inside" style={{ fontSize: 8, fill: "#fff", fontWeight: 600 }}
-              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
-          </Bar>
-          <Bar dataKey="UNKNOWN" stackId="a" fill="#d6d3d1" radius={[2, 2, 0, 0]}>
-            <LabelList dataKey="UNKNOWN" position="inside" style={{ fontSize: 8, fill: "#78716c", fontWeight: 600 }}
-              formatter={(v: number) => v >= 10 ? `${v}%` : ""} />
-          </Bar>
-          {refLine !== undefined && (
-            <ReferenceLine
-              x={refLine.toFixed(2)}
-              stroke="#7c3aed" strokeWidth={2} strokeDasharray="4 3"
-              label={{ value: refLabel ?? `${refLine}`, position: "top", fontSize: 9, fill: "#7c3aed" }}
-            />
-          )}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export default function SimilarityDistributionChart({ data }: { data: DistributionRow[] }) {
+  const nameHist  = buildHist(data, "name");
+  const imageHist = buildHist(data, "image");
   const nameCdf   = buildCdf(data, "name");
   const imageCdf  = buildCdf(data, "image");
-  const nameShare = buildShare(data, "name");
-  const imageShare = buildShare(data, "image");
 
   return (
     <div className="space-y-6">
-      {/* CDF charts */}
+
+      {/* Histogram — absolute counts */}
       <div className="space-y-2">
         <p className="text-xs text-stone-500 leading-relaxed">
-          <span className="font-semibold text-stone-600">Cumulative composition</span> — each bar shows the
-          SAME/DIFFERENT/UNKNOWN share of all pairs scoring at or below that score.
-          As the threshold moves right, watch the{" "}
-          <span className="text-green-600 font-semibold">green (SAME)</span> share grow —
-          the crossover point is where setting the threshold starts costing you true matches.
+          <span className="font-semibold text-stone-600">Distribution (absolute counts)</span> — number of
+          pairs at each score bin.{" "}
+          <span className="text-green-600 font-semibold">Green = SAME</span>,{" "}
+          <span className="text-red-500 font-semibold">Red = DIFFERENT</span>,{" "}
+          <span className="text-stone-400 font-semibold">Grey = no ground truth</span>.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <CdfChart data={nameCdf}  title="Name similarity — cumulative" refLine={0.50} refLabel="threshold 0.50" />
-          <CdfChart data={imageCdf} title="Image similarity — cumulative" refLine={0.80} refLabel="threshold 0.80" />
+          <HistChart data={nameHist}  title="Name similarity — count per bin"  refLine={0.50} refLabel="threshold 0.50" />
+          <HistChart data={imageHist} title="Image similarity — count per bin" refLine={0.80} refLabel="threshold 0.80" />
         </div>
       </div>
 
-      {/* Share charts */}
+      {/* CDF — cumulative composition */}
       <div className="space-y-2">
         <p className="text-xs text-stone-500 leading-relaxed">
-          <span className="font-semibold text-stone-600">Share per bin</span> — each bar sums to 100%, showing the
-          composition of pairs at that exact score.{" "}
-          <span className="text-green-600 font-semibold">Green (SAME)</span> should dominate on the right;{" "}
-          <span className="text-red-500 font-semibold">red (DIFFERENT)</span> on the left.
-          Set the threshold where green starts becoming the majority.
+          <span className="font-semibold text-stone-600">Cumulative composition</span> — of all pairs scoring
+          at or below each threshold, what share are SAME vs DIFFERENT?
+          Watch the <span className="text-green-600 font-semibold">green</span> share grow left to right —
+          the crossover where green overtakes red is the natural threshold.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <ShareChart data={nameShare}  title="Name similarity — share per bin" refLine={0.50} refLabel="threshold 0.50" />
-          <ShareChart data={imageShare} title="Image similarity — share per bin" refLine={0.80} refLabel="threshold 0.80" />
+          <CdfChart data={nameCdf}  title="Name similarity — cumulative composition"  refLine={0.50} refLabel="threshold 0.50" />
+          <CdfChart data={imageCdf} title="Image similarity — cumulative composition" refLine={0.80} refLabel="threshold 0.80" />
         </div>
       </div>
+
     </div>
   );
 }
