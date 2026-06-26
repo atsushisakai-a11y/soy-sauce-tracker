@@ -3,6 +3,7 @@ import path from "path";
 import Link from "next/link";
 import { BigQuery } from "@google-cloud/bigquery";
 import ModelEvaluationChart, { type EvalRow } from "@/components/ModelEvaluationChart";
+import SimilarityDistributionChart, { type DistributionRow } from "@/components/SimilarityDistributionChart";
 
 export const revalidate = 3600;
 
@@ -30,6 +31,25 @@ function getBqClient(): BigQuery {
     return new BigQuery({ projectId: "soy-sauce-tracker", credentials: JSON.parse(credJson) });
   }
   return new BigQuery({ projectId: "soy-sauce-tracker" });
+}
+
+async function loadSimilarityDistribution(): Promise<DistributionRow[]> {
+  try {
+    const bq = getBqClient();
+    const [rows] = await bq.query(`
+      SELECT 'name'  AS metric, ROUND(NAME_SIMILARITY  * 20) / 20 AS bin,
+             COALESCE(ground_truth_verdict, 'UNKNOWN') AS verdict, COUNT(*) AS cnt
+      FROM \`soy-sauce-tracker.staging.staging_similarity_scores_evaluated\`
+      GROUP BY 1, 2, 3
+      UNION ALL
+      SELECT 'image' AS metric, ROUND(IMAGE_SIMILARITY * 20) / 20 AS bin,
+             COALESCE(ground_truth_verdict, 'UNKNOWN') AS verdict, COUNT(*) AS cnt
+      FROM \`soy-sauce-tracker.staging.staging_similarity_scores_evaluated\`
+      GROUP BY 1, 2, 3
+      ORDER BY 1, 2
+    `);
+    return rows as DistributionRow[];
+  } catch { return []; }
 }
 
 async function loadModelEvaluation(): Promise<EvalRow[]> {
@@ -182,6 +202,7 @@ const pipeline = [
 export default async function TechPage() {
   const dbt = loadDbtSummary();
   const evalData = await loadModelEvaluation();
+  const distData = await loadSimilarityDistribution();
   const dbtByLayer: Record<string, TestResult[]> = {};
   if (dbt) {
     for (const t of dbt.tests) {
@@ -501,6 +522,12 @@ export default async function TechPage() {
               the match threshold when structural text confirms the match. This avoids the old
               multiplicative-penalty approach that could accidentally suppress valid matches.
             </p>
+
+            {distData.length > 0 && (
+              <div className="border border-stone-100 rounded-xl p-5">
+                <SimilarityDistributionChart data={distData} />
+              </div>
+            )}
 
             {/* Jaccard + aliases */}
             <div className="border border-stone-100 rounded-xl overflow-hidden">
